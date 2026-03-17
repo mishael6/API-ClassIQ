@@ -1,21 +1,25 @@
-FROM php:8.2-apache
+FROM php:8.2-fpm-alpine
 
-# Force only mpm_prefork — do it in one step to avoid conflicts
-RUN set -e; \
-    cd /etc/apache2/mods-enabled; \
-    rm -f mpm_event.load mpm_event.conf mpm_worker.load mpm_worker.conf 2>/dev/null; \
-    ln -sf ../mods-available/mpm_prefork.load mpm_prefork.load; \
-    ln -sf ../mods-available/mpm_prefork.conf mpm_prefork.conf; \
-    ln -sf ../mods-available/rewrite.load rewrite.load; \
-    ln -sf ../mods-available/headers.load headers.load
+# Install nginx
+RUN apk add --no-cache nginx
 
-# Allow .htaccess
-RUN sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
+# Install mysqli extension
+RUN docker-php-ext-install mysqli
 
-# Copy files
+# Nginx config
+RUN mkdir -p /run/nginx
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Copy API files
 COPY . /var/www/html/
 
-RUN chown -R www-data:www-data /var/www/html
+# Permissions
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 755 /var/www/html
+
+# Start script
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
 EXPOSE 80
-CMD ["apache2-foreground"]
+CMD ["/start.sh"]
