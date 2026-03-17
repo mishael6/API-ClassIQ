@@ -1,20 +1,20 @@
 FROM php:8.2-apache
 
-# Enable mod_rewrite and mod_headers only
-RUN a2enmod rewrite headers
+# Disable conflicting MPM modules, enable only prefork
+RUN a2dismod mpm_event mpm_worker 2>/dev/null || true \
+    && a2enmod mpm_prefork \
+    && a2enmod rewrite \
+    && a2enmod headers
 
-# Copy all API files to Apache web root
+# Allow .htaccess overrides
+RUN sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
+
+# Copy API files
 COPY . /var/www/html/
 
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html
-
-# Apache config — allow .htaccess overrides and fix MPM issue
-RUN echo '<Directory /var/www/html>\n\
-    AllowOverride All\n\
-    Require all granted\n\
-</Directory>' > /etc/apache2/conf-available/classiq.conf \
-    && a2enconf classiq
+# Permissions
+RUN chown -R www-data:www-data /var/www/html \
+    && find /var/www/html -type f -name "*.php" -exec chmod 644 {} \;
 
 EXPOSE 80
 CMD ["apache2-foreground"]
