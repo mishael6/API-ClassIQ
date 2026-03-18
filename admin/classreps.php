@@ -12,7 +12,7 @@ if ($method === 'GET') {
 
     $where = '1=1';
     if ($search) $where .= " AND (u.name LIKE '%$search%' OR u.email LIKE '%$search%')";
-    if ($status)  $where .= " AND u.status = '$status'";
+    if ($status) $where .= " AND u.status = '$status'";
 
     $rows = $conn->query("
         SELECT u.id, u.name, u.email, u.institution, u.department,
@@ -32,7 +32,7 @@ if ($method === 'GET') {
 if ($method === 'PUT') {
     $body   = get_body();
     $id     = (int)($body['id']     ?? 0);
-    $action = $body['action'] ?? ''; // 'approve' | 'reject'
+    $action = $body['action'] ?? '';
 
     if (!$id)     json_error('Classrep ID required.');
     if (!$action) json_error('Action required.');
@@ -52,19 +52,19 @@ if ($method === 'PUT') {
     $user = $info->get_result()->fetch_assoc();
 
     if ($user) {
-        $to      = $user['email'];
-        $name    = $user['name'];
-        $subject = $action === 'approve'
+        $to        = $user['email'];
+        $name      = $user['name'];
+        $subject   = $action === 'approve'
             ? 'ClassIQ — Your Account Has Been Approved'
             : 'ClassIQ — Account Registration Update';
         $body_text = $action === 'approve'
-            ? "Dear $name,\n\nYour ClassIQ class representative account has been approved! You can now log in at: https://classiq.netlify.app/login\n\n— ClassIQ Team"
-            : "Dear $name,\n\nUnfortunately your ClassIQ registration request has been rejected. Please contact your administrator for more information.\n\n— ClassIQ Team";
+            ? "Dear $name,\n\nYour ClassIQ class representative account has been approved! You can now log in.\n\n— ClassIQ Team"
+            : "Dear $name,\n\nYour ClassIQ registration request has been rejected. Please contact your administrator.\n\n— ClassIQ Team";
         $headers = "From: ClassIQ <noreply@classiq.app>\r\nContent-Type: text/plain; charset=UTF-8";
         @mail($to, $subject, $body_text, $headers);
     }
 
-    json_ok(['message' => "Classrep $status successfully.", 'status' => $status]);
+    json_ok(['message' => "Classrep {$status} successfully.", 'status' => $status]);
 }
 
 // ── DELETE — remove classrep ──────────────────────────────────
@@ -74,25 +74,36 @@ if ($method === 'DELETE') {
 
     if (!$id) json_error('Classrep ID required.');
 
-    // Delete in order to respect foreign keys
-    $conn->prepare("DELETE FROM attendance  WHERE classrep_id = ?")->execute() || true;
-    $conn->prepare("DELETE FROM qr_sessions WHERE classrep_id = ?")->execute() || true;
-    $conn->prepare("DELETE FROM students    WHERE user_id = ?")->execute()     || true;
-    $conn->prepare("DELETE FROM troubleshooting_logs WHERE user_id = ?")->execute() || true;
+    // Verify classrep exists first
+    $chk = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+    $chk->bind_param('i', $id);
+    $chk->execute();
+    if ($chk->get_result()->num_rows === 0) json_error('Classrep not found.');
 
-    // Proper deletion with bound params
-    foreach ([
-        "DELETE FROM attendance            WHERE classrep_id = ?",
-        "DELETE FROM qr_sessions           WHERE classrep_id = ?",
-        "DELETE FROM students              WHERE user_id = ?",
-        "DELETE FROM troubleshooting_logs  WHERE user_id = ?",
-        "DELETE FROM login_logs            WHERE user_id = ?",
-        "DELETE FROM users                 WHERE id = ?",
-    ] as $sql) {
+    // Disable foreign key checks for clean deletion
+    $conn->query("SET FOREIGN_KEY_CHECKS = 0");
+
+    // Delete all related data
+    $tables = [
+        "DELETE FROM attendance           WHERE classrep_id = ?",
+        "DELETE FROM qr_sessions          WHERE classrep_id = ?",
+        "DELETE FROM students             WHERE user_id = ?",
+        "DELETE FROM troubleshooting_logs WHERE user_id = ?",
+        "DELETE FROM login_logs           WHERE user_id = ?",
+        "DELETE FROM users                WHERE id = ?",
+    ];
+
+    foreach ($tables as $sql) {
         $s = $conn->prepare($sql);
-        $s->bind_param('i', $id);
-        $s->execute();
+        if ($s) {
+            $s->bind_param('i', $id);
+            $s->execute();
+            $s->close();
+        }
     }
+
+    // Re-enable foreign key checks
+    $conn->query("SET FOREIGN_KEY_CHECKS = 1");
 
     json_ok(['message' => 'Classrep and all associated data deleted.']);
 }
