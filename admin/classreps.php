@@ -39,12 +39,15 @@ if ($method === 'PUT') {
 
     $status = $action === 'approve' ? 'approved' : 'rejected';
 
+    // Verify user exists first
+    $exists = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+    $exists->bind_param('i', $id);
+    $exists->execute();
+    if ($exists->get_result()->num_rows === 0) json_error('Classrep not found.');
+
     $stmt = $conn->prepare("UPDATE users SET status = ? WHERE id = ?");
     $stmt->bind_param('si', $status, $id);
     $stmt->execute();
-
-    if ($stmt->affected_rows === 0) json_error('Classrep not found.');
-
     // Send email notification
     $info = $conn->prepare("SELECT name, email FROM users WHERE id = ? LIMIT 1");
     $info->bind_param('i', $id);
