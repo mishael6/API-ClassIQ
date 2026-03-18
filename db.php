@@ -1,16 +1,23 @@
 <?php
-// api/db.php
-// Copy your existing credentials here
+// Railway provides these environment variables automatically
+// when a MySQL service is in the same project
+$host   = getenv('MYSQLHOST')     ?: getenv('DB_HOST') ?: 'localhost';
+$port   = getenv('MYSQLPORT')     ?: getenv('DB_PORT') ?: '3306';
+$user   = getenv('MYSQLUSER')     ?: getenv('DB_USER') ?: 'root';
+$pass   = getenv('MYSQLPASSWORD') ?: getenv('DB_PASS') ?: '';
+$dbname = getenv('MYSQLDATABASE') ?: getenv('DB_NAME') ?: 'railway';
 
-define('DB_HOST', 'sql206.infinityfree.com');
-define('DB_USER', 'if0_39634628');
-define('DB_PASS', '2wKy27QJ1wA');
-define('DB_NAME', 'if0_39634628_classiq');
+$conn = new mysqli($host, $user, $pass, $dbname, (int)$port);
 
-$conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
 if ($conn->connect_error) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Database connection failed']);
+    echo json_encode([
+        'success' => false,
+        'message' => 'DB connection failed: ' . $conn->connect_error
+    ]);
     exit;
 }
+
 $conn->set_charset('utf8mb4');
+ini_set('log_errors', 1);
+ini_set('error_log', '/tmp/php_errors.log');
