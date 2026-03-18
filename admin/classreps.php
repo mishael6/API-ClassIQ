@@ -5,7 +5,7 @@ require_admin($conn);
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// ── GET — list classreps ──────────────────────────────────────
+// ── GET ───────────────────────────────────────────────────────
 if ($method === 'GET') {
     $search = $conn->real_escape_string($_GET['search'] ?? '');
     $status = $conn->real_escape_string($_GET['status'] ?? '');
@@ -32,83 +32,62 @@ if ($method === 'GET') {
 if ($method === 'PUT') {
     $body   = get_body();
     $id     = (int)($body['id']     ?? 0);
-    $action = $body['action'] ?? '';
+    $action = trim($body['action']  ?? '');
 
     if (!$id)     json_error('Classrep ID required.');
     if (!$action) json_error('Action required.');
 
-    $status = $action === 'approve' ? 'approved' : 'rejected';
+    $status = ($action === 'approve') ? 'approved' : 'rejected';
 
-    // Verify user exists first
-    $exists = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
-    $exists->bind_param('i', $id);
-    $exists->execute();
-    if ($exists->get_result()->num_rows === 0) json_error('Classrep not found.');
+    // Use direct query to avoid any prepared statement issues
+    $safe_id     = (int)$id;
+    $safe_status = $conn->real_escape_string($status);
 
-    $stmt = $conn->prepare("UPDATE users SET status = ? WHERE id = ?");
-    $stmt->bind_param('si', $status, $id);
-    $stmt->execute();
-    // Send email notification
-    $info = $conn->prepare("SELECT name, email FROM users WHERE id = ? LIMIT 1");
-    $info->bind_param('i', $id);
-    $info->execute();
-    $user = $info->get_result()->fetch_assoc();
+    $result = $conn->query("UPDATE users SET status = '$safe_status' WHERE id = $safe_id");
 
-    if ($user) {
+    if ($result === false) {
+        json_error('DB error: ' . $conn->error);
+    }
+
+    // Send email (non-blocking)
+    $info = $conn->query("SELECT name, email FROM users WHERE id = $safe_id LIMIT 1");
+    if ($info && $user = $info->fetch_assoc()) {
         $to        = $user['email'];
         $name      = $user['name'];
         $subject   = $action === 'approve'
             ? 'ClassIQ — Your Account Has Been Approved'
             : 'ClassIQ — Account Registration Update';
         $body_text = $action === 'approve'
-            ? "Dear $name,\n\nYour ClassIQ class representative account has been approved! You can now log in.\n\n— ClassIQ Team"
-            : "Dear $name,\n\nYour ClassIQ registration request has been rejected. Please contact your administrator.\n\n— ClassIQ Team";
-        $headers = "From: ClassIQ <noreply@classiq.app>\r\nContent-Type: text/plain; charset=UTF-8";
-        @mail($to, $subject, $body_text, $headers);
+            ? "Dear $name,\n\nYour ClassIQ account has been approved! You can now log in.\n\n— ClassIQ Team"
+            : "Dear $name,\n\nYour ClassIQ registration has been rejected.\n\n— ClassIQ Team";
+        @mail($to, $subject, $body_text, "From: ClassIQ <noreply@classiq.app>");
     }
 
-    json_ok(['message' => "Classrep {$status} successfully.", 'status' => $status]);
+    json_ok([
+        'message' => "Classrep {$status} successfully.",
+        'status'  => $status,
+    ]);
 }
 
-// ── DELETE — remove classrep ──────────────────────────────────
+// ── DELETE ────────────────────────────────────────────────────
 if ($method === 'DELETE') {
     $body = get_body();
     $id   = (int)($body['id'] ?? 0);
 
     if (!$id) json_error('Classrep ID required.');
 
-    // Verify classrep exists first
-    $chk = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
-    $chk->bind_param('i', $id);
-    $chk->execute();
-    if ($chk->get_result()->num_rows === 0) json_error('Classrep not found.');
-
-    // Disable foreign key checks for clean deletion
     $conn->query("SET FOREIGN_KEY_CHECKS = 0");
 
-    // Delete all related data
-    $tables = [
-        "DELETE FROM attendance           WHERE classrep_id = ?",
-        "DELETE FROM qr_sessions          WHERE classrep_id = ?",
-        "DELETE FROM students             WHERE user_id = ?",
-        "DELETE FROM troubleshooting_logs WHERE user_id = ?",
-        "DELETE FROM login_logs           WHERE user_id = ?",
-        "DELETE FROM users                WHERE id = ?",
-    ];
+    $conn->query("DELETE FROM attendance           WHERE classrep_id = $id");
+    $conn->query("DELETE FROM qr_sessions          WHERE classrep_id = $id");
+    $conn->query("DELETE FROM students             WHERE user_id = $id");
+    $conn->query("DELETE FROM troubleshooting_logs WHERE user_id = $id");
+    $conn->query("DELETE FROM login_logs           WHERE user_id = $id");
+    $conn->query("DELETE FROM users                WHERE id = $id");
 
-    foreach ($tables as $sql) {
-        $s = $conn->prepare($sql);
-        if ($s) {
-            $s->bind_param('i', $id);
-            $s->execute();
-            $s->close();
-        }
-    }
-
-    // Re-enable foreign key checks
     $conn->query("SET FOREIGN_KEY_CHECKS = 1");
 
-    json_ok(['message' => 'Classrep and all associated data deleted.']);
+    json_ok(['message' => 'Classrep deleted successfully.']);
 }
 
 json_error('Method not allowed.', 405);
