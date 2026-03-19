@@ -6,21 +6,17 @@ $classrep_id = $user['id'];
 $today       = date('Y-m-d');
 
 // Total students
-$r = $conn->query("SELECT COUNT(*) AS c FROM students WHERE user_id = $classrep_id");
-$total_students = $r->fetch_assoc()['c'];
+$total_students = (int)$conn->query("SELECT COUNT(*) AS c FROM students WHERE user_id = $classrep_id")->fetch_assoc()['c'];
 
 // Attendance today
-$r2 = $conn->query("SELECT COUNT(*) AS c FROM attendance WHERE classrep_id = $classrep_id AND attendance_date = '$today' AND deleted_at IS NULL");
-$attendance_today = $r2->fetch_assoc()['c'];
+$attendance_today = (int)$conn->query("SELECT COUNT(*) AS c FROM attendance WHERE classrep_id = $classrep_id AND attendance_date = '$today' AND deleted_at IS NULL")->fetch_assoc()['c'];
 
 // Last session
-$r3 = $conn->query("SELECT MAX(time_marked) AS last FROM attendance WHERE classrep_id = $classrep_id AND deleted_at IS NULL");
-$last_row    = $r3->fetch_assoc();
+$last_row     = $conn->query("SELECT MAX(time_marked) AS last FROM attendance WHERE classrep_id = $classrep_id AND deleted_at IS NULL")->fetch_assoc();
 $last_session = $last_row['last'] ? date('M j, g:i A', strtotime($last_row['last'])) : 'No sessions yet';
 
 // Pending issues
-$r4 = $conn->query("SELECT COUNT(*) AS c FROM troubleshooting_logs WHERE user_id = $classrep_id AND status = 'pending'");
-$pending_issues = $r4->fetch_assoc()['c'];
+$pending_issues = (int)$conn->query("SELECT COUNT(*) AS c FROM troubleshooting_logs WHERE user_id = $classrep_id AND status = 'pending'")->fetch_assoc()['c'];
 
 // Chart — last 7 days
 $chart = [];
@@ -31,19 +27,28 @@ for ($i = 6; $i >= 0; $i--) {
     $chart[] = ['day' => $day, 'count' => (int)$rc->fetch_assoc()['c']];
 }
 
-// Recent attendance (last 10)
-$stmt = $conn->prepare("SELECT student_name, index_number, lecture_name, attendance_date, status FROM attendance WHERE classrep_id = ? AND deleted_at IS NULL ORDER BY time_marked DESC LIMIT 10");
-$stmt->bind_param('i', $classrep_id);
-$stmt->execute();
-$recent = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+// Students with attendance count
+$students = $conn->query("
+    SELECT s.id, s.name, s.index_number, s.email, s.phone,
+           s.institution, s.department, s.program, s.level, s.created_at,
+           COUNT(a.id) AS attendance_count,
+           SUM(CASE WHEN a.status = 'Present' THEN 1 ELSE 0 END) AS present_count,
+           SUM(CASE WHEN a.status = 'Flagged' THEN 1 ELSE 0 END) AS flagged_count,
+           MAX(a.attendance_date) AS last_seen
+    FROM students s
+    LEFT JOIN attendance a ON a.student_id = s.id AND a.deleted_at IS NULL
+    WHERE s.user_id = $classrep_id
+    GROUP BY s.id
+    ORDER BY s.name ASC
+")->fetch_all(MYSQLI_ASSOC);
 
 json_ok([
     'stats' => [
-        'total_students'   => (int)$total_students,
-        'attendance_today' => (int)$attendance_today,
+        'total_students'   => $total_students,
+        'attendance_today' => $attendance_today,
         'last_session'     => $last_session,
-        'pending_issues'   => (int)$pending_issues,
+        'pending_issues'   => $pending_issues,
     ],
-    'chart'              => $chart,
-    'recent_attendance'  => $recent,
+    'chart'    => $chart,
+    'students' => $students,
 ]);
