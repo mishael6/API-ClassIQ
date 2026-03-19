@@ -27,7 +27,7 @@ if ($recipient_type === 'all') {
     $stmt->bind_param('i', $recipient_id);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
-    if (!$row)          json_error('Recipient not found.');
+    if (!$row)              json_error('Recipient not found.');
     if (empty($row['phone'])) json_error('This classrep has no phone number on record.');
     $recipients[] = $row;
 }
@@ -35,39 +35,43 @@ if ($recipient_type === 'all') {
 if (empty($recipients)) json_error('No recipients with phone numbers found.');
 
 // ── Payloqa config ────────────────────────────────────────────
-$payloqa_key    = getenv('PAYLOQA_API_KEY') ?: '';
-$payloqa_sender = getenv('PAYLOQA_SENDER')  ?: 'ClassIQ';
-
-if (!$payloqa_key) json_error('SMS service not configured. Add PAYLOQA_API_KEY to environment variables.');
+$api_key     = getenv('PAYLOQA_API_KEY')     ?: 'pk_live_of502pjkel';
+$platform_id = getenv('PAYLOQA_PLATFORM_ID') ?: 'plat_xvadsq3rx0f';
+$sender_id   = getenv('PAYLOQA_SENDER')      ?: 'ClassIQ';
 
 $sms_sent = 0;
 $errors   = [];
 
 foreach ($recipients as $r) {
-    // Format Ghana phone number → international format
+    // Format to E.164 (+233XXXXXXXXX)
     $phone = preg_replace('/\D/', '', $r['phone']);
     if (strlen($phone) === 10 && str_starts_with($phone, '0')) {
-        $phone = '233' . substr($phone, 1);
+        $phone = '+233' . substr($phone, 1);
     } elseif (strlen($phone) === 9) {
-        $phone = '233' . $phone;
+        $phone = '+233' . $phone;
+    } elseif (strlen($phone) === 12 && str_starts_with($phone, '233')) {
+        $phone = '+' . $phone;
+    } else {
+        $errors[] = "{$r['name']}: invalid phone number format ({$r['phone']})";
+        continue;
     }
 
-    $sms_text = substr($message, 0, 155);
-
     $payload = json_encode([
-        'recipient' => $phone,
-        'sender'    => $payloqa_sender,
-        'message'   => $sms_text,
+        'recipient_number'   => $phone,
+        'sender_id'          => $sender_id,
+        'message'            => substr($message, 0, 155),
+        'usage_message_type' => 'notification',
     ]);
 
-    $ch = curl_init('https://api.payloqa.com/v1/sms/send');
+    $ch = curl_init('https://sms.payloqa.com/api/v1/sms/send');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => $payload,
         CURLOPT_HTTPHEADER     => [
             'Content-Type: application/json',
-            'Authorization: Bearer ' . $payloqa_key,
+            'X-API-Key: '      . $api_key,
+            'X-Platform-Id: '  . $platform_id,
         ],
         CURLOPT_TIMEOUT => 15,
     ]);
@@ -78,10 +82,11 @@ foreach ($recipients as $r) {
 
     $resp_data = json_decode($resp, true);
 
-    if ($http_code === 200 && ($resp_data['status'] ?? '') === 'success') {
+    if ($http_code === 200 && ($resp_data['success'] ?? false)) {
         $sms_sent++;
     } else {
-        $errors[] = "SMS to {$r['name']} ({$phone}) failed: " . ($resp_data['message'] ?? "HTTP $http_code");
+        $err_msg = $resp_data['message'] ?? $resp_data['error'] ?? "HTTP $http_code";
+        $errors[] = "{$r['name']} ({$phone}): $err_msg";
     }
 }
 
@@ -90,7 +95,7 @@ if ($sms_sent === 0) {
 }
 
 json_ok([
-    'message'  => "$sms_sent SMS sent successfully." . (empty($errors) ? '' : ' Some failed.'),
+    'message'  => "$sms_sent SMS sent successfully." . (!empty($errors) ? ' Some failed.' : ''),
     'sms_sent' => $sms_sent,
     'errors'   => $errors,
 ]);
