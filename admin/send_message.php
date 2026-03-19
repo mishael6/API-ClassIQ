@@ -27,8 +27,8 @@ if ($recipient_type === 'all') {
     $stmt->bind_param('i', $recipient_id);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
-    if (!$row)              json_error('Recipient not found.');
-    if (empty($row['phone'])) json_error('This classrep has no phone number on record.');
+    if (!$row)                json_error('Recipient not found.');
+    if (empty($row['phone'])) json_error("This classrep has no phone number on record.");
     $recipients[] = $row;
 }
 
@@ -43,7 +43,7 @@ $sms_sent = 0;
 $errors   = [];
 
 foreach ($recipients as $r) {
-    // Format to E.164 (+233XXXXXXXXX)
+    // Format to E.164
     $phone = preg_replace('/\D/', '', $r['phone']);
     if (strlen($phone) === 10 && str_starts_with($phone, '0')) {
         $phone = '+233' . substr($phone, 1);
@@ -52,7 +52,7 @@ foreach ($recipients as $r) {
     } elseif (strlen($phone) === 12 && str_starts_with($phone, '233')) {
         $phone = '+' . $phone;
     } else {
-        $errors[] = "{$r['name']}: invalid phone number format ({$r['phone']})";
+        $errors[] = "{$r['name']}: invalid phone ({$r['phone']})";
         continue;
     }
 
@@ -70,8 +70,8 @@ foreach ($recipients as $r) {
         CURLOPT_POSTFIELDS     => $payload,
         CURLOPT_HTTPHEADER     => [
             'Content-Type: application/json',
-            'X-API-Key: '      . $api_key,
-            'X-Platform-Id: '  . $platform_id,
+            'X-API-Key: '     . $api_key,
+            'X-Platform-Id: ' . $platform_id,
         ],
         CURLOPT_TIMEOUT => 15,
     ]);
@@ -85,13 +85,23 @@ foreach ($recipients as $r) {
     if ($http_code === 200 && ($resp_data['success'] ?? false)) {
         $sms_sent++;
     } else {
-        $err_msg = $resp_data['message'] ?? $resp_data['error'] ?? "HTTP $http_code";
-        $errors[] = "{$r['name']} ({$phone}): $err_msg";
+        // Recursively extract error message from nested arrays/objects
+        $err = $resp_data['message']
+            ?? $resp_data['error']
+            ?? $resp_data['data']['message']
+            ?? $resp_data['data']['error']
+            ?? null;
+
+        // If still array, JSON encode it so we can read it
+        if (is_array($err)) $err = json_encode($err);
+        if (!$err)          $err = json_encode($resp_data) ?: "HTTP $http_code";
+
+        $errors[] = "{$r['name']} ({$phone}): $err";
     }
 }
 
 if ($sms_sent === 0) {
-    json_error('Failed to send SMS. ' . implode('. ', $errors));
+    json_error('Failed to send. ' . implode(' | ', $errors));
 }
 
 json_ok([
