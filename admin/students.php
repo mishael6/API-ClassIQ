@@ -59,7 +59,7 @@ if ($method === 'PUT') {
     ");
 
     if (!$result) json_error('Failed to update: ' . $conn->error);
-    json_ok(['message' => 'Student updated successfully.']);
+    json_ok(['message' => 'Student updated successfully, Check it out.']);
 }
 
 json_error('Method not allowed.', 405);
