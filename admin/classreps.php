@@ -28,45 +28,60 @@ if ($method === 'GET') {
     json_ok(['classreps' => $rows]);
 }
 
-// ── PUT — approve or reject ───────────────────────────────────
+// ── PUT — approve, reject, or update ─────────────────────────
 if ($method === 'PUT') {
     $body   = get_body();
     $id     = (int)($body['id']     ?? 0);
     $action = trim($body['action']  ?? '');
 
-    if (!$id)     json_error('Classrep ID required.');
+    if (!$id) json_error('Classrep ID required.');
+
+    // ── Update classrep details ──
+    if ($action === 'update') {
+        $name        = $conn->real_escape_string(trim($body['name']        ?? ''));
+        $email       = $conn->real_escape_string(trim($body['email']       ?? ''));
+        $phone       = $conn->real_escape_string(trim($body['phone']       ?? ''));
+        $institution = $conn->real_escape_string(trim($body['institution'] ?? ''));
+        $department  = $conn->real_escape_string(trim($body['department']  ?? ''));
+        $program     = $conn->real_escape_string(trim($body['program']     ?? ''));
+
+        if (!$name || !$email) json_error('Name and email are required.');
+
+        $chk = $conn->query("SELECT id FROM users WHERE email = '$email' AND id != $id LIMIT 1");
+        if ($chk->num_rows > 0) json_error('This email is already used by another account.');
+
+        $result = $conn->query("
+            UPDATE users SET
+                name        = '$name',
+                email       = '$email',
+                phone       = '$phone',
+                institution = '$institution',
+                department  = '$department',
+                program     = '$program'
+            WHERE id = $id
+        ");
+
+        if (!$result) json_error('Update failed: ' . $conn->error);
+        json_ok(['message' => 'Classrep updated successfully.']);
+    }
+
+    // ── Approve or reject ──
     if (!$action) json_error('Action required.');
-
-    $status = ($action === 'approve') ? 'approved' : 'rejected';
-
-    // Use direct query to avoid any prepared statement issues
-    $safe_id     = (int)$id;
+    $status     = ($action === 'approve') ? 'approved' : 'rejected';
     $safe_status = $conn->real_escape_string($status);
 
-    $result = $conn->query("UPDATE users SET status = '$safe_status' WHERE id = $safe_id");
+    $result = $conn->query("UPDATE users SET status = '$safe_status' WHERE id = $id");
+    if ($result === false) json_error('DB error: ' . $conn->error);
 
-    if ($result === false) {
-        json_error('DB error: ' . $conn->error);
-    }
-
-    // Send email (non-blocking)
-    $info = $conn->query("SELECT name, email FROM users WHERE id = $safe_id LIMIT 1");
+    $info = $conn->query("SELECT name, email FROM users WHERE id = $id LIMIT 1");
     if ($info && $user = $info->fetch_assoc()) {
-        $to        = $user['email'];
-        $name      = $user['name'];
-        $subject   = $action === 'approve'
-            ? 'ClassIQ — Your Account Has Been Approved'
-            : 'ClassIQ — Account Registration Update';
         $body_text = $action === 'approve'
-            ? "Dear $name,\n\nYour ClassIQ account has been approved! You can now log in.\n\n— ClassIQ Team"
-            : "Dear $name,\n\nYour ClassIQ registration has been rejected.\n\n— ClassIQ Team";
-        @mail($to, $subject, $body_text, "From: ClassIQ <noreply@classiq.app>");
+            ? "Dear {$user['name']},\n\nYour ClassIQ account has been approved!\n\n— ClassIQ Team"
+            : "Dear {$user['name']},\n\nYour ClassIQ registration has been rejected.\n\n— ClassIQ Team";
+        @mail($user['email'], 'ClassIQ Account Update', $body_text, "From: ClassIQ <noreply@classiq.app>");
     }
 
-    json_ok([
-        'message' => "Classrep {$status} successfully.",
-        'status'  => $status,
-    ]);
+    json_ok(['message' => "Classrep {$status} successfully.", 'status' => $status]);
 }
 
 // ── DELETE ────────────────────────────────────────────────────
