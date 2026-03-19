@@ -7,37 +7,29 @@ ini_set('log_errors', 1);
 
 date_default_timezone_set('Africa/Accra');
 
-// ── CORS — works on all hosts ─────────────────────────────────
-// Allow specific origins in production, or use * for development
-$allowed_origins = [
-    'http://localhost:5173',
-    'http://localhost:4173',
-    'http://127.0.0.1:5173',
-    'https://classiq.free.nf',        // your host (remove this line)
-    'https://your-netlify-app.netlify.app', // replace with your Netlify URL
-];
+// ── Always return JSON even on fatal errors ───────────────────
+register_shutdown_function(function () {
+    $err = error_get_last();
+    if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        if (!headers_sent()) {
+            http_response_code(500);
+            header('Content-Type: application/json');
+        }
+        echo json_encode([
+            'success' => false,
+            'message' => 'Server error: ' . $err['message'] . ' in ' . basename($err['file']) . ' line ' . $err['line']
+        ]);
+    }
+});
 
-$origin = $_SERVER['HTTP_ORIGIN'] ?? $_SERVER['HTTP_REFERER'] ?? '';
-// Strip trailing slash from referer if present
-$origin = rtrim(parse_url($origin, PHP_URL_SCHEME) . '://' . parse_url($origin, PHP_URL_HOST), '/');
-
-if (in_array($origin, $allowed_origins)) {
-    header("Access-Control-Allow-Origin: $origin");
-} else {
-    // Fallback: allow all (safe for development, tighten in production)
-    header("Access-Control-Allow-Origin: *");
-}
-
+// ── CORS ──────────────────────────────────────────────────────
+header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Credentials: true');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-header('Content-Type: application/json; charset=UTF-8');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Content-Type: application/json');
 
-// Handle preflight OPTIONS request immediately
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 
 // ── DB ────────────────────────────────────────────────────────
 require_once __DIR__ . '/db.php';
@@ -50,11 +42,12 @@ function get_bearer_token(): ?string {
     return null;
 }
 
-function require_auth(mysqli $conn, string $role = 'classrep'): array {
+function require_auth(mysqli $conn): array {
     $token = get_bearer_token();
     if (!$token) json_error('Unauthorized', 401);
 
-    $stmt = $conn->prepare("SELECT id, name, email, role FROM users WHERE session_token = ? LIMIT 1");
+    // role can be 'class_rep' in DB
+    $stmt = $conn->prepare("SELECT id, name, email, role FROM users WHERE session_token = ? AND status = 'approved' LIMIT 1");
     $stmt->bind_param('s', $token);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
@@ -92,12 +85,10 @@ function get_body(): array {
     return json_decode($raw, true) ?? [];
 }
 
-// ── Haversine ─────────────────────────────────────────────────
 function haversine(float $lat1, float $lng1, float $lat2, float $lng2): float {
     $R    = 6371000;
     $dLat = deg2rad($lat2 - $lat1);
     $dLng = deg2rad($lng2 - $lng1);
-    $a    = sin($dLat / 2) ** 2
-          + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+    $a    = sin($dLat/2)**2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng/2)**2;
     return $R * 2 * atan2(sqrt($a), sqrt(1 - $a));
 }
