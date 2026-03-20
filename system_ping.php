@@ -1,18 +1,8 @@
 <?php
-// api/log_error.php
-// Public endpoint - Unauthenticated so the frontend can securely POST crash reports natively.
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
+// api/system_ping.php
+require_once __DIR__ . '/bootstrap.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
-
-require_once __DIR__ . '/db.php';
-
-// Ensure the `error_logs` table exists
+// Ensure the `error_logs` table natively exists on ping
 $conn->query("
     CREATE TABLE IF NOT EXISTS error_logs (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -24,7 +14,7 @@ $conn->query("
     )
 ");
 
-$body = json_decode(file_get_contents('php://input'), true);
+$body = get_body();
 
 if ($body && isset($body['message'])) {
     $msg   = $conn->real_escape_string($body['message']);
@@ -35,4 +25,4 @@ if ($body && isset($body['message'])) {
     $conn->query("INSERT INTO error_logs (message, stack, url, user_agent) VALUES ('$msg', '$stack', '$url', '$ua')");
 }
 
-echo json_encode(['success' => true]);
+json_ok();

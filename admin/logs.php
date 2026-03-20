@@ -8,7 +8,7 @@ $rows = $conn->query("
     FROM login_logs l
     LEFT JOIN users u ON u.id = l.user_id AND l.role = 'classrep'
     LEFT JOIN admins a ON a.id = l.user_id AND l.role = 'admin'
-    ORDER BY l.created_at DESC
+    ORDER BY l.id DESC
     LIMIT 200
 ");
 
