@@ -70,6 +70,9 @@ if ($method === 'PUT') {
     $status     = ($action === 'approve') ? 'approved' : 'rejected';
     $safe_status = $conn->real_escape_string($status);
 
+    // SILENT SCHEMA PATCH: Convert ENUM to VARCHAR to prevent Data Truncation
+    $conn->query("ALTER TABLE users MODIFY COLUMN status VARCHAR(30) DEFAULT 'pending'");
+
     $result = $conn->query("UPDATE users SET status = '$safe_status' WHERE id = $id");
     if ($result === false) json_error('DB error: ' . $conn->error);
 
