@@ -59,7 +59,21 @@ if ($method === 'PUT') {
     ");
 
     if (!$result) json_error('Failed to update: ' . $conn->error);
-    json_ok(['message' => 'Student updated successfully, Check it out.']);
+    json_ok(['message' => 'Student updated successfully.']);
 }
 
 json_error('Method not allowed.', 405);
+
+// ── DELETE — remove student ───────────────────────────────────
+if ($method === 'DELETE') {
+    $body = get_body();
+    $id   = (int)($body['id'] ?? 0);
+    if (!$id) json_error('Student ID required.');
+
+    $conn->query("SET FOREIGN_KEY_CHECKS = 0");
+    $conn->query("DELETE FROM attendance WHERE student_id = $id");
+    $conn->query("DELETE FROM students   WHERE id = $id");
+    $conn->query("SET FOREIGN_KEY_CHECKS = 1");
+
+    json_ok(['message' => 'Student deleted.']);
+}
