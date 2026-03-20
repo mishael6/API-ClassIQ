@@ -11,6 +11,7 @@ if ($method === 'GET') {
     $classrep_id = (int)($_GET['classrep_id'] ?? 0);
     $limit       = min((int)($_GET['limit']   ?? 10), 100);
     $offset      = (int)($_GET['offset']      ?? 0);
+    $date_filter = $conn->real_escape_string($_GET['date'] ?? '');
 
     $where = '1=1';
     if ($search)      $where .= " AND (s.name LIKE '%$search%' OR s.index_number LIKE '%$search%' OR s.email LIKE '%$search%')";
@@ -18,8 +19,13 @@ if ($method === 'GET') {
 
     $total = (int)$conn->query("SELECT COUNT(*) AS c FROM students s WHERE $where")->fetch_assoc()['c'];
 
+    $date_select = "";
+    if ($date_filter) {
+        $date_select = ", (SELECT status FROM attendance WHERE student_id = s.id AND attendance_date = '$date_filter' AND deleted_at IS NULL LIMIT 1) AS attendance_status";
+    }
+
     $rows = $conn->query("
-        SELECT s.*, u.name AS classrep_name
+        SELECT s.*, u.name AS classrep_name $date_select
         FROM students s
         LEFT JOIN users u ON u.id = s.user_id
         WHERE $where
