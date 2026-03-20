@@ -36,4 +36,14 @@ $stmt->bind_param('sssssssss', $name, $email, $hash, $phone, $institution, $depa
 
 if (!$stmt->execute()) json_error('Registration failed: ' . $stmt->error);
 
+// ── Fire Admin SMS Notification ──
+$adminPhone = getenv('ADMIN_PHONE');
+$arkeselKey = getenv('ARKESEL_API_KEY');
+
+if ($adminPhone && $arkeselKey) {
+    // Fire-and-forget safely
+    $msg = "New ClassiQ Classrep!\nName: $name\nInst: $institution\nPlease check the dashboard to approve.";
+    send_admin_sms($adminPhone, $msg, $arkeselKey);
+}
+
 json_ok(['message' => 'Account created successfully. Wait for admin approval before logging in.']);

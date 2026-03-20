@@ -92,3 +92,22 @@ function haversine(float $lat1, float $lng1, float $lat2, float $lng2): float {
     $a    = sin($dLat/2)**2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng/2)**2;
     return $R * 2 * atan2(sqrt($a), sqrt(1 - $a));
 }
+
+function send_admin_sms(string $phone, string $message, string $api_key): void {
+    $ch = curl_init('https://sms.arkesel.com/api/v2/sms/send');
+    $payload = json_encode([
+        'sender'     => 'ClassiQ',
+        'message'    => $message,
+        'recipients' => [$phone]
+    ]);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'api-key: ' . $api_key,
+        'Content-Type: application/json'
+    ]);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5); // Don't hang the server waiting for SMS
+    curl_exec($ch);
+    curl_close($ch);
+}
