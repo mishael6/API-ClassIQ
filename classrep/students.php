@@ -32,6 +32,9 @@ if ($effective === 'DELETE') {
     $student_id = (int)($body['id'] ?? 0);
     if (!$student_id) json_error('Student ID required.');
 
+    // Delete attendance records first to avoid FK constraint
+    $conn->query("DELETE FROM attendance WHERE student_id = $student_id");
+
     $stmt = $conn->prepare("DELETE FROM students WHERE id = ? AND user_id = ?");
     $stmt->bind_param('ii', $student_id, $classrep_id);
     if (!$stmt->execute()) json_error('Failed to delete.');
