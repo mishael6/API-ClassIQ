@@ -1,13 +1,19 @@
 <?php
-// api/classrep/students.php
 require_once __DIR__ . '/../bootstrap.php';
 
 $user        = require_auth($conn);
 $classrep_id = $user['id'];
 $method      = $_SERVER['REQUEST_METHOD'];
+$body        = ($method !== 'GET') ? get_body() : [];
 
-// GET — list students
-if ($method === 'GET') {
+// Method override — POST can act as PUT or DELETE
+$effective = $method;
+if ($method === 'POST' && !empty($body['_method'])) {
+    $effective = strtoupper($body['_method']);
+}
+
+// ── GET — list students ───────────────────────────────────────
+if ($effective === 'GET') {
     $search = $conn->real_escape_string($_GET['search'] ?? '');
     $limit  = min((int)($_GET['limit'] ?? 50), 200);
     $offset = (int)($_GET['offset'] ?? 0);
@@ -21,9 +27,35 @@ if ($method === 'GET') {
     json_ok(['students' => $rows, 'total' => (int)$total]);
 }
 
-// POST — add student
-if ($method === 'POST') {
-    $body = get_body();
+// ── DELETE — remove student ───────────────────────────────────
+if ($effective === 'DELETE') {
+    $student_id = (int)($body['id'] ?? 0);
+    if (!$student_id) json_error('Student ID required.');
+
+    $stmt = $conn->prepare("DELETE FROM students WHERE id = ? AND user_id = ?");
+    $stmt->bind_param('ii', $student_id, $classrep_id);
+    if (!$stmt->execute()) json_error('Failed to delete.');
+    json_ok(['message' => 'Student deleted.']);
+}
+
+// ── PUT — update student ──────────────────────────────────────
+if ($effective === 'PUT') {
+    $student_id = (int)($body['id'] ?? 0);
+    if (!$student_id) json_error('Student ID required.');
+
+    $stmt = $conn->prepare("UPDATE students SET name=?, index_number=?, email=?, phone=?, institution=?, program=?, department=?, level=? WHERE id=? AND user_id=?");
+    $stmt->bind_param('ssssssssii',
+        $body['name'], strtoupper($body['index_number']),
+        $body['email'], $body['phone'], $body['institution'],
+        $body['program'], $body['department'], $body['level'],
+        $student_id, $classrep_id
+    );
+    if (!$stmt->execute()) json_error('Failed to update student.');
+    json_ok(['message' => 'Student updated.']);
+}
+
+// ── POST — add student ────────────────────────────────────────
+if ($effective === 'POST') {
     $fields = ['name','index_number','email','phone','institution','program','department','level'];
     foreach ($fields as $f) if (empty($body[$f])) json_error("$f is required.");
 
@@ -37,32 +69,6 @@ if ($method === 'POST') {
     $stmt->bind_param('issssssss', $classrep_id, $body['name'], $index, $body['email'], $body['phone'], $body['institution'], $body['program'], $body['department'], $body['level']);
     if (!$stmt->execute()) json_error('Failed to add student.');
     json_ok(['message' => 'Student added.', 'id' => $conn->insert_id]);
-}
-
-// PUT — update student (also accepts POST with _method=PUT)
-$body = get_body();
-$is_put = $method === 'PUT' || ($method === 'POST' && ($body['_method'] ?? '') === 'PUT');
-if ($is_put) {
-    $student_id = (int)($body['id'] ?? 0);
-    if (!$student_id) json_error('Student ID required.');
-
-    $stmt = $conn->prepare("UPDATE students SET name=?, index_number=?, email=?, phone=?, institution=?, program=?, department=?, level=? WHERE id=? AND user_id=?");
-    $stmt->bind_param('ssssssssii', $body['name'], strtoupper($body['index_number']), $body['email'], $body['phone'], $body['institution'], $body['program'], $body['department'], $body['level'], $student_id, $classrep_id);
-    if (!$stmt->execute()) json_error('Failed to update student.');
-    json_ok(['message' => 'Student updated.']);
-}
-
-// DELETE — remove student (also accepts POST with _method=DELETE for nginx compat)
-$body = get_body();
-$is_delete = $method === 'DELETE' || ($method === 'POST' && ($body['_method'] ?? '') === 'DELETE');
-if ($is_delete) {
-    $student_id = (int)($body['id'] ?? 0);
-    if (!$student_id) json_error('Student ID required.');
-
-    $stmt = $conn->prepare("DELETE FROM students WHERE id = ? AND user_id = ?");
-    $stmt->bind_param('ii', $student_id, $classrep_id);
-    if (!$stmt->execute()) json_error('Failed to delete.');
-    json_ok(['message' => 'Student deleted.']);
 }
 
 json_error('Method not allowed.', 405);
