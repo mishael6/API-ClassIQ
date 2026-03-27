@@ -93,21 +93,36 @@ function haversine(float $lat1, float $lng1, float $lat2, float $lng2): float {
     return $R * 2 * atan2(sqrt($a), sqrt(1 - $a));
 }
 
-function send_admin_sms(string $phone, string $message, string $api_key): void {
-    $ch = curl_init('https://sms.arkesel.com/api/v2/sms/send');
+function send_admin_sms(string $phone, string $message): void {
+    $api_key     = getenv('PAYLOQA_API_KEY')     ?: 'pk_live_of502pjkel';
+    $platform_id = getenv('PAYLOQA_PLATFORM_ID') ?: 'plat_xvadsq3rx0f';
+    $sender_id   = getenv('PAYLOQA_SENDER')      ?: 'ClassIQ';
+
+    // Format to E.164
+    $phone = preg_replace('/\D/', '', $phone);
+    if (strlen($phone) === 10 && str_starts_with($phone, '0')) $phone = '+233' . substr($phone, 1);
+    elseif (strlen($phone) === 9) $phone = '+233' . $phone;
+    elseif (strlen($phone) === 12 && str_starts_with($phone, '233')) $phone = '+' . $phone;
+
     $payload = json_encode([
-        'sender'     => 'ClassiQ',
-        'message'    => $message,
-        'recipients' => [$phone]
+        'recipient_number'   => $phone,
+        'sender_id'          => $sender_id,
+        'message'            => substr($message, 0, 155),
+        'usage_message_type' => 'notification',
     ]);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'api-key: ' . $api_key,
-        'Content-Type: application/json'
+
+    $ch = curl_init('https://sms.payloqa.com/api/v1/sms/send');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'X-API-Key: '     . $api_key,
+            'X-Platform-Id: ' . $platform_id,
+        ],
+        CURLOPT_TIMEOUT => 5, // Prevent server freeze
     ]);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5); // Don't hang the server waiting for SMS
     curl_exec($ch);
     curl_close($ch);
 }
