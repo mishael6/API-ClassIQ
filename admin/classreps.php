@@ -76,12 +76,18 @@ if ($method === 'PUT') {
     $result = $conn->query("UPDATE users SET status = '$safe_status' WHERE id = $id");
     if ($result === false) json_error('DB error: ' . $conn->error);
 
-    $info = $conn->query("SELECT name, email FROM users WHERE id = $id LIMIT 1");
+    $info = $conn->query("SELECT name, email, phone FROM users WHERE id = $id LIMIT 1");
     if ($info && $user = $info->fetch_assoc()) {
         $body_text = $action === 'approve'
             ? "Dear {$user['name']},\n\nYour ClassIQ account has been approved!\n\n— ClassIQ Team"
             : "Dear {$user['name']},\n\nYour ClassIQ registration has been rejected.\n\n— ClassIQ Team";
         @mail($user['email'], 'ClassIQ Account Update', $body_text, "From: ClassIQ <noreply@classiq.app>");
+
+        // ── Fire Payloqa Authentication Hint SMS ──
+        if ($action === 'approve' && !empty($user['phone'])) {
+            $msg = "Hello {$user['name']}, your ClassiQ account ({$user['email']}) has been approved! You may now login using the password you set during registration.";
+            send_admin_sms($user['phone'], $msg);
+        }
     }
 
     json_ok(['message' => "Classrep {$status} successfully.", 'status' => $status]);
