@@ -68,8 +68,6 @@ if ($method === 'PUT') {
     json_ok(['message' => 'Student updated successfully.']);
 }
 
-json_error('Method not allowed.', 405);
-
 // ── DELETE — remove student ───────────────────────────────────
 if ($method === 'DELETE') {
     $body = get_body();

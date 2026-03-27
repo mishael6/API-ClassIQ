@@ -23,6 +23,15 @@ if ($type === 'all') {
     json_ok(['affected' => $stmt->affected_rows, 'message' => 'All records deleted.']);
 }
 
+if ($type === 'single') {
+    if (!$index_number) json_error('Index number required.');
+    $reason = 'Removed manually by Class Rep';
+    $stmt = $conn->prepare("UPDATE attendance SET deleted_at = NOW(), deleted_by = ?, deletion_reason = ? WHERE classrep_id = ? AND attendance_date = ? AND lecture_name = ? AND index_number = ? AND deleted_at IS NULL");
+    $stmt->bind_param('isisss', $classrep_id, $reason, $classrep_id, $date, $lecture_name, $index_number);
+    $stmt->execute();
+    json_ok(['affected' => $stmt->affected_rows]);
+}
+
 // Soft-delete flagged or outside
 $status = $type === 'flagged' ? 'Flagged' : 'Outside';
 $reason = ucfirst($type) . ' — removed by Class Rep';
