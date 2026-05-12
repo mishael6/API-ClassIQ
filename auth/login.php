@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../../bootstrap.php';
+require_once __DIR__ . '/../bootstrap.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error('Method not allowed', 405);
 
