@@ -1,31 +1,45 @@
 <?php
-require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error('Method not allowed', 405);
 
-$body     = get_body();
-$email    = trim($body['email']    ?? '');
-$password = trim($body['password'] ?? '');
+$body         = get_body();
+$name         = trim($body['name']         ?? '');
+$index_number = trim($body['index_number'] ?? '');
 
-if (!$email || !$password) json_error('Email and password are required.');
+if (!$name || !$index_number) json_error('Name and index number are required.');
 
-$stmt = $conn->prepare("SELECT id, name, email, password, status FROM users WHERE email = ? LIMIT 1");
-$stmt->bind_param('s', $email);
+// Find student by name and index number
+$stmt = $conn->prepare("
+    SELECT id, classrep_id, name, index_number, institution, program, department, level, email, phone
+    FROM students
+    WHERE name = ? AND index_number = ?
+    LIMIT 1
+");
+$stmt->bind_param('ss', $name, $index_number);
 $stmt->execute();
-$user = $stmt->get_result()->fetch_assoc();
+$student = $stmt->get_result()->fetch_assoc();
 
-if (!$user)                                    json_error('No account found with this email.');
-if (!password_verify($password, $user['password'])) json_error('Incorrect password.');
-if ($user['status'] === 'pending')             json_error('Your account is pending admin approval.');
-if ($user['status'] === 'rejected')            json_error('Your account has been rejected. Contact the administrator.');
-if ($user['status'] !== 'approved')            json_error('Your account is not active.');
+if (!$student) json_error('No student found with this name and index number.');
 
+// Check if this student is a classrep
+$stmt2 = $conn->prepare("
+    SELECT id FROM users WHERE id = ? LIMIT 1
+");
+$stmt2->bind_param('i', $student['id']);
+$stmt2->execute();
+$classrep = $stmt2->get_result()->fetch_assoc();
+
+// Generate session token
 $token = bin2hex(random_bytes(32));
-$upd   = $conn->prepare("UPDATE users SET session_token = ? WHERE id = ?");
-$upd->bind_param('si', $token, $user['id']);
+$upd   = $conn->prepare("UPDATE students SET session_token = ? WHERE id = ?");
+$upd->bind_param('si', $token, $student['id']);
 $upd->execute();
 
-unset($user['password'], $user['status']);
-$user['role'] = 'classrep'; // frontend role identifier
+// Assign role based on whether they are a classrep
+$student['role'] = $classrep ? 'classrep' : 'student';
+if ($classrep) {
+    $student['classrep_record_id'] = $classrep['id'];
+}
 
-json_ok(['token' => $token, 'user' => $user]);
+json_ok(['token' => $token, 'user' => $student]);
