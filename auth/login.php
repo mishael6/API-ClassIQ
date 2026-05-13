@@ -56,6 +56,13 @@ if ($email && $password) {
     $upd->bind_param('si', $token, $user['id']);
     $upd->execute();
 
+    // ✅ Fetch their student record to get student_id for trivia
+    $stu = $conn->prepare("SELECT id as student_id FROM students WHERE user_id = ? LIMIT 1");
+    $stu->bind_param('i', $user['id']);
+    $stu->execute();
+    $stuRow = $stu->get_result()->fetch_assoc();
+    if ($stuRow) $user['student_id'] = $stuRow['student_id'];
+
     unset($user['password'], $user['status']);
     $user['role'] = 'classrep';
     json_ok(['token' => $token, 'user' => $user]);
