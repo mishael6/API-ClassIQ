@@ -7,35 +7,39 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error('Method not allowed', 405)
 $body       = get_body();
 $student_id = (int)($body['student_id'] ?? 0);
 $phone      = trim($body['phone']       ?? '');
-$network    = trim($body['network']     ?? 'MTN'); // MTN, Vodafone, AirtelTigo
+$network    = trim($body['network']     ?? 'MTN');
 
 if (!$student_id) json_error('Student ID required.');
 if (!$phone)      json_error('Phone number required.');
 
 // Check already subscribed
-$today = date('Y-m-d');
-$sub = $conn->prepare("SELECT id, end_date FROM ai_subscriptions WHERE student_id = ? AND status = 'active' AND end_date >= ? LIMIT 1");
-$sub->bind_param('is', $student_id, $today);
+$sub = $conn->prepare("SELECT id, end_date FROM ai_subscriptions WHERE student_id = ? AND status = 'active' AND end_date >= CURDATE() LIMIT 1");
+$sub->bind_param('i', $student_id);
 $sub->execute();
 $existing = $sub->get_result()->fetch_assoc();
-if ($existing) {
-    json_error("You already have an active subscription until {$existing['end_date']}.");
-}
+if ($existing) json_error("You already have an active subscription until {$existing['end_date']}.");
 
-$amount    = 30.00;
-$reference = 'CLASSIQ-AI-' . $student_id . '-' . time();
+// Check free grant
+$grant = $conn->prepare("SELECT id FROM ai_free_grants WHERE student_id = ? AND (expires_at IS NULL OR expires_at >= CURDATE()) LIMIT 1");
+$grant->bind_param('i', $student_id);
+$grant->execute();
+if ($grant->get_result()->num_rows > 0) json_error('You already have unlimited access granted by your institution.');
 
-// Payloqa payment request
+// Get dynamic price from settings
+$price_row = $conn->query("SELECT setting_value FROM ai_settings WHERE setting_key = 'subscription_price' LIMIT 1")->fetch_assoc();
+$amount    = (float)($price_row['setting_value'] ?? 30.00);
+
+$reference   = 'SIX-' . $student_id . '-' . time();
 $payloqa_key = getenv('PAYLOQA_API_KEY');
 if (!$payloqa_key) json_error('Payment service not configured.');
 
 $payloqa_payload = json_encode([
-    'amount'      => $amount,
-    'currency'    => 'GHS',
-    'phone'       => $phone,
-    'network'     => $network,
-    'reference'   => $reference,
-    'description' => 'ClassIQ AI Study - Monthly Unlimited',
+    'amount'       => $amount,
+    'currency'     => 'GHS',
+    'phone'        => $phone,
+    'network'      => $network,
+    'reference'    => $reference,
+    'description'  => 'Six AI Study Assistant - Monthly Unlimited',
     'callback_url' => getenv('APP_URL') . '/api/ai/payment_callback.php',
 ]);
 
@@ -56,21 +60,19 @@ curl_close($ch);
 if (!$response) json_error('Payment service unreachable. Try again.');
 
 $data = json_decode($response, true);
-
 if ($http_code !== 200 && $http_code !== 201) {
-    $err = $data['message'] ?? 'Payment initiation failed.';
-    json_error($err);
+    json_error($data['message'] ?? 'Payment initiation failed.');
 }
 
 // Save pending subscription
 $start = date('Y-m-d');
 $end   = date('Y-m-d', strtotime('+1 month'));
-
-$ins = $conn->prepare("INSERT INTO ai_subscriptions (student_id, start_date, end_date, amount, payment_reference, status) VALUES (?, ?, ?, ?, ?, 'pending')");
+$ins   = $conn->prepare("INSERT INTO ai_subscriptions (student_id, start_date, end_date, amount, payment_reference, status) VALUES (?, ?, ?, ?, ?, 'pending')");
 $ins->bind_param('issds', $student_id, $start, $end, $amount, $reference);
 $ins->execute();
 
 json_ok([
-    'message'   => 'Payment prompt sent to your phone. Approve the MoMo request.',
+    'message'   => 'Payment prompt sent to your phone. Approve the MoMo request to activate Six unlimited.',
     'reference' => $reference,
+    'amount'    => $amount,
 ]);
