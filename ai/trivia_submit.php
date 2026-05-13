@@ -43,7 +43,7 @@ $lb->execute();
 
 // Get updated rank
 $rank_query = $conn->prepare("
-    SELECT COUNT(*) + 1 AS rank
+    SELECT COUNT(*) + 1 AS `rank`
     FROM trivia_leaderboard
     WHERE total_points > (
         SELECT total_points FROM trivia_leaderboard WHERE student_id = ?
