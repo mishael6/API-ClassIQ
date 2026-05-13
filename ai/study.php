@@ -5,14 +5,37 @@ require_once __DIR__ . '/../bootstrap.php';
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error('Method not allowed', 405);
 
 $body = get_body();
-$text = trim($body['text'] ?? '');
-$mode = trim($body['mode'] ?? 'explain');
+$text       = trim($body['text']       ?? '');
+$mode       = trim($body['mode']       ?? 'explain');
+$student_id = (int)($body['student_id'] ?? 0);
 
-if (!$text) json_error('No text provided.');
-if (strlen($text) > 20000) json_error('Text too long. Please upload a shorter document.');
+if (!$text)       json_error('No text provided.');
+if (!$student_id) json_error('Student ID required.');
+if (strlen($text) > 20000) json_error('Text too long. Please use a shorter document.');
 
 $api_key = getenv('GROQ_API_KEY');
 if (!$api_key) json_error('AI service not configured.');
+
+$today = date('Y-m-d');
+
+// Check active subscription
+$sub = $conn->prepare("SELECT id FROM ai_subscriptions WHERE student_id = ? AND status = 'active' AND end_date >= ? LIMIT 1");
+$sub->bind_param('is', $student_id, $today);
+$sub->execute();
+$has_subscription = $sub->get_result()->num_rows > 0;
+
+if (!$has_subscription) {
+    // Check daily usage
+    $usage = $conn->prepare("SELECT count FROM ai_usage WHERE student_id = ? AND date = ?");
+    $usage->bind_param('is', $student_id, $today);
+    $usage->execute();
+    $row = $usage->get_result()->fetch_assoc();
+    $used = $row['count'] ?? 0;
+
+    if ($used >= 10) {
+        json_error('Daily limit reached. You have used all 10 free AI generations for today. Upgrade to unlimited for GH₵30/month.', 429);
+    }
+}
 
 switch ($mode) {
     case 'explain':
@@ -28,20 +51,14 @@ switch ($mode) {
         $prompt = "Create 5 fill-in-the-blank questions from the following learning material. Use ___ for the blank. After all questions, write 'ANSWERS:' and list the correct answers numbered.\n\n---\n$text";
         break;
     default:
-        json_error('Invalid mode. Use: explain, mcq, flashcard, or fill.');
+        json_error('Invalid mode.');
 }
 
 $payload = json_encode([
     'model'    => 'llama-3.3-70b-versatile',
     'messages' => [
-        [
-            'role'    => 'system',
-            'content' => 'You are a helpful study assistant for university students. Be clear, concise, and educational.',
-        ],
-        [
-            'role'    => 'user',
-            'content' => $prompt,
-        ],
+        ['role' => 'system', 'content' => 'You are a helpful study assistant for university students. Be clear, concise, and educational.'],
+        ['role' => 'user',   'content' => $prompt],
     ],
     'max_tokens'  => 1500,
     'temperature' => 0.7,
@@ -73,4 +90,26 @@ if ($http_code !== 200) {
 $result = $data['choices'][0]['message']['content'] ?? '';
 if (!$result) json_error('AI returned an empty response. Try again.');
 
-json_ok(['result' => $result, 'mode' => $mode]);
+// Update usage count (only for free tier)
+if (!$has_subscription) {
+    $upsert = $conn->prepare("INSERT INTO ai_usage (student_id, date, count) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE count = count + 1");
+    $upsert->bind_param('is', $student_id, $today);
+    $upsert->execute();
+}
+
+// Get remaining count
+$remaining = null;
+if (!$has_subscription) {
+    $usage2 = $conn->prepare("SELECT count FROM ai_usage WHERE student_id = ? AND date = ?");
+    $usage2->bind_param('is', $student_id, $today);
+    $usage2->execute();
+    $row2 = $usage2->get_result()->fetch_assoc();
+    $remaining = 10 - ($row2['count'] ?? 0);
+}
+
+json_ok([
+    'result'       => $result,
+    'mode'         => $mode,
+    'remaining'    => $remaining, // null means unlimited
+    'subscribed'   => $has_subscription,
+]);
