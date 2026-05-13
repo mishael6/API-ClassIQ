@@ -4,14 +4,14 @@ require_once __DIR__ . '/../bootstrap.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error('Method not allowed', 405);
 
-$body   = get_body();
-$text   = trim($body['text']   ?? '');
-$mode   = trim($body['mode']   ?? 'explain');
+$body = get_body();
+$text = trim($body['text'] ?? '');
+$mode = trim($body['mode'] ?? 'explain');
 
 if (!$text) json_error('No text provided.');
 if (strlen($text) > 20000) json_error('Text too long. Please upload a shorter document.');
 
-$api_key = getenv('GEMINI_API_KEY');
+$api_key = getenv('GROQ_API_KEY');
 if (!$api_key) json_error('AI service not configured.');
 
 switch ($mode) {
@@ -32,25 +32,32 @@ switch ($mode) {
 }
 
 $payload = json_encode([
-    'contents' => [
-        ['parts' => [['text' => $prompt]]]
+    'model'    => 'llama-3.3-70b-versatile',
+    'messages' => [
+        [
+            'role'    => 'system',
+            'content' => 'You are a helpful study assistant for university students. Be clear, concise, and educational.',
+        ],
+        [
+            'role'    => 'user',
+            'content' => $prompt,
+        ],
     ],
-    'generationConfig' => [
-        'temperature'     => 0.7,
-        'maxOutputTokens' => 1500,
-    ]
+    'max_tokens'  => 1500,
+    'temperature' => 0.7,
 ]);
 
-$url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$api_key";
-
-$ch = curl_init($url);
+$ch = curl_init('https://api.groq.com/openai/v1/chat/completions');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    'Content-Type: application/json',
+    "Authorization: Bearer $api_key",
+]);
 curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 
-$response = curl_exec($ch);
+$response  = curl_exec($ch);
 $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
@@ -63,7 +70,7 @@ if ($http_code !== 200) {
     json_error($err);
 }
 
-$result = $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
+$result = $data['choices'][0]['message']['content'] ?? '';
 if (!$result) json_error('AI returned an empty response. Try again.');
 
 json_ok(['result' => $result, 'mode' => $mode]);
