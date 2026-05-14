@@ -32,18 +32,28 @@ if ($classrep_id > 0) {
     if ($crRow) $cr_user_id = $crRow['user_id'];
 }
 
+$program    = '';
+$department = '';
+$level      = '';
+
 $stmt = $conn->prepare("
-    INSERT INTO students (name, index_number, institution, email, phone, classrep_id, user_id, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+    INSERT INTO students (name, index_number, institution, email, phone, program, department, level, classrep_id, user_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
 ");
 
 $null_user_id = $cr_user_id;
 $null_classrep = $classrep_id > 0 ? $classrep_id : null;
 
 $stmt->bind_param(
-    'sssssii',
-    $name, $index_number, $institution,
-    $email, $phone,
+    'ssssssssii',
+    $name,
+    $index_number,
+    $institution,
+    $email,
+    $phone,
+    $program,
+    $department,
+    $level,
     $null_classrep,
     $null_user_id
 );
