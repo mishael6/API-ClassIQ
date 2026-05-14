@@ -17,7 +17,7 @@ $stmt = $conn->prepare("
         s.level,
         l.total_points,
         l.total_sessions,
-        RANK() OVER (ORDER BY l.total_points DESC) AS rank
+        RANK() OVER (ORDER BY l.total_points DESC) AS `rank`
     FROM trivia_leaderboard l
     JOIN students s ON s.id = l.student_id
     ORDER BY l.total_points DESC
@@ -36,7 +36,7 @@ if ($student_id) {
         SELECT 
             l.total_points,
             l.total_sessions,
-            RANK() OVER (ORDER BY l.total_points DESC) AS rank
+            RANK() OVER (ORDER BY l.total_points DESC) AS `rank`
         FROM trivia_leaderboard l
         WHERE l.student_id = ?
         LIMIT 1
