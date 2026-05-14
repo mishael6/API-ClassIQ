@@ -10,7 +10,7 @@ $sql = "
     SELECT s.id, s.name, s.program, s.institution, s.department
     FROM students s
     INNER JOIN users u ON u.id = s.user_id
-    WHERE u.role = 'classrep' AND u.status = 'approved'
+    WHERE u.role = 'class_rep' AND u.status = 'approved'
 ";
 
 if ($search) {
