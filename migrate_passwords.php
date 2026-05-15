@@ -1,7 +1,8 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 
-$students = $conn->query("SELECT id, index_number FROM students WHERE password IS NULL");
+// Process 10 students at a time
+$students = $conn->query("SELECT id, index_number FROM students WHERE password IS NULL LIMIT 10");
 $count = 0;
 
 while ($row = $students->fetch_assoc()) {
@@ -12,4 +13,7 @@ while ($row = $students->fetch_assoc()) {
     $count++;
 }
 
-echo json_encode(['migrated' => $count]);
+// Check how many remain
+$remaining = $conn->query("SELECT COUNT(*) as c FROM students WHERE password IS NULL")->fetch_assoc()['c'];
+
+echo json_encode(['migrated_this_batch' => $count, 'remaining' => $remaining]);
