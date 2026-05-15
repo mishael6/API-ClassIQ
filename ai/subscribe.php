@@ -52,6 +52,7 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
     "Authorization: Bearer $payloqa_key",
 ]);
 curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
 $response  = curl_exec($ch);
 $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
