@@ -27,8 +27,10 @@ if ($email) {
     $upd->execute();
 
     unset($user['password']);
-    // Fallback role if not present
-    if (!isset($user['role'])) $user['role'] = 'class_rep';
+    // Ensure the frontend receives 'classrep' instead of 'class_rep'
+    if (!isset($user['role']) || $user['role'] === 'class_rep') {
+        $user['role'] = 'classrep';
+    }
     
     json_ok(['token' => $token, 'user' => $user]);
 

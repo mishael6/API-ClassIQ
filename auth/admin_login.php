@@ -16,7 +16,18 @@ $stmt->execute();
 $admin = $stmt->get_result()->fetch_assoc();
 
 if (!$admin) json_error('Admin not found.');
-if (!password_verify($password, $admin['password'])) json_error('Invalid password.');
+
+if (!password_verify($password, $admin['password'])) {
+    // Fix the bad hash inserted by migration.sql if the user tries the documented password
+    if ($password === 'Admin@1234' && $admin['password'] === '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi') {
+        $newHash = password_hash('Admin@1234', PASSWORD_DEFAULT);
+        $fixStmt = $conn->prepare("UPDATE admins SET password = ? WHERE id = ?");
+        $fixStmt->bind_param('si', $newHash, $admin['id']);
+        $fixStmt->execute();
+    } else {
+        json_error('Invalid password.');
+    }
+}
 
 $token = bin2hex(random_bytes(32));
 
