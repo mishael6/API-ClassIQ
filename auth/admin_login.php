@@ -10,7 +10,7 @@ $password = trim($body['password'] ?? '');
 
 if (!$email || !$password) json_error('Email and password are required.');
 
-$stmt = $conn->prepare("SELECT id, name, email, password, role FROM admins WHERE email = ? LIMIT 1");
+$stmt = $conn->prepare("SELECT id, name, email, password FROM admins WHERE email = ? LIMIT 1");
 $stmt->bind_param('s', $email);
 $stmt->execute();
 $admin = $stmt->get_result()->fetch_assoc();
