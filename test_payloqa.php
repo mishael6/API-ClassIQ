@@ -1,32 +1,24 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 
-// Test 1: Can Render reach Google?
-$ch1 = curl_init('https://www.google.com');
-curl_setopt($ch1, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch1, CURLOPT_TIMEOUT, 10);
-$r1 = curl_exec($ch1);
-$e1 = curl_error($ch1);
-curl_close($ch1);
+$urls = [
+    'api.payloqa.com'      => 'https://api.payloqa.com',
+    'payments.payloqa.com' => 'https://payments.payloqa.com',
+    'auth.payloqa.com'     => 'https://auth.payloqa.com',
+    'sms.payloqa.com'      => 'https://sms.payloqa.com',
+];
 
-// Test 2: Can Render reach Payloqa main site?
-$ch2 = curl_init('https://payloqa.com');
-curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch2, CURLOPT_TIMEOUT, 10);
-$r2 = curl_exec($ch2);
-$e2 = curl_error($ch2);
-curl_close($ch2);
+$results = [];
+foreach ($urls as $name => $url) {
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    $r = curl_exec($ch);
+    $e = curl_error($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $results[$name] = ['reached' => !empty($r), 'http_code' => $code, 'error' => $e];
+}
 
-// Test 3: Can Render reach Groq? (already works)
-$ch3 = curl_init('https://api.groq.com');
-curl_setopt($ch3, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch3, CURLOPT_TIMEOUT, 10);
-$r3 = curl_exec($ch3);
-$e3 = curl_error($ch3);
-curl_close($ch3);
-
-echo json_encode([
-    'google'  => ['reached' => !empty($r1), 'error' => $e1],
-    'payloqa' => ['reached' => !empty($r2), 'error' => $e2],
-    'groq'    => ['reached' => !empty($r3), 'error' => $e3],
-]);
+echo json_encode($results, JSON_PRETTY_PRINT);
