@@ -32,23 +32,23 @@ $department  = $classrep['department'];
 $program     = $classrep['program'];
 $level       = ''; // not required anymore
 
-// Check duplicate index number in this class
-$chk = $conn->prepare("SELECT id FROM students WHERE index_number = ? AND user_id = ? LIMIT 1");
-$chk->bind_param('si', $index_number, $classrep_id);
+// Check duplicate index number (Global)
+$chk = $conn->prepare("SELECT id FROM students WHERE index_number = ? LIMIT 1");
+$chk->bind_param('s', $index_number);
 $chk->execute();
-if ($chk->get_result()->num_rows > 0) json_error('You are already registered in this class.');
+if ($chk->get_result()->num_rows > 0) json_error('A student with this index number is already registered.');
 
-// Check duplicate email in this class
-$chkEmail = $conn->prepare("SELECT id FROM students WHERE email = ? AND user_id = ? LIMIT 1");
-$chkEmail->bind_param('si', $email, $classrep_id);
+// Check duplicate email (Global)
+$chkEmail = $conn->prepare("SELECT id FROM students WHERE email = ? LIMIT 1");
+$chkEmail->bind_param('s', $email);
 $chkEmail->execute();
-if ($chkEmail->get_result()->num_rows > 0) json_error('This email is already registered in this class.');
+if ($chkEmail->get_result()->num_rows > 0) json_error('This email address is already registered.');
 
-// Check duplicate phone in this class
-$chkPhone = $conn->prepare("SELECT id FROM students WHERE phone = ? AND user_id = ? LIMIT 1");
-$chkPhone->bind_param('si', $phone, $classrep_id);
+// Check duplicate phone (Global)
+$chkPhone = $conn->prepare("SELECT id FROM students WHERE phone = ? LIMIT 1");
+$chkPhone->bind_param('s', $phone);
 $chkPhone->execute();
-if ($chkPhone->get_result()->num_rows > 0) json_error('This phone number is already registered in this class.');
+if ($chkPhone->get_result()->num_rows > 0) json_error('This phone number is already registered.');
 
 // Insert student
 $ins = $conn->prepare("INSERT INTO students (user_id, name, index_number, email, phone, institution, program, department, level, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
