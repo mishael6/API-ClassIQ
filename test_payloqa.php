@@ -1,37 +1,32 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 
-$payloqa_key = getenv('PAYLOQA_API_KEY');
+// Test 1: Can Render reach Google?
+$ch1 = curl_init('https://www.google.com');
+curl_setopt($ch1, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch1, CURLOPT_TIMEOUT, 10);
+$r1 = curl_exec($ch1);
+$e1 = curl_error($ch1);
+curl_close($ch1);
 
-$payload = json_encode([
-    'amount'       => 1.00,
-    'currency'     => 'GHS',
-    'phone'        => '0502076920',
-    'network'      => 'vodafone',
-    'reference'    => 'TEST-' . time(),
-    'description'  => 'Test payment',
-    'callback_url' => 'https://api-classiq.onrender.com/ai/payment_callback.php',
-]);
+// Test 2: Can Render reach Payloqa main site?
+$ch2 = curl_init('https://payloqa.com');
+curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch2, CURLOPT_TIMEOUT, 10);
+$r2 = curl_exec($ch2);
+$e2 = curl_error($ch2);
+curl_close($ch2);
 
-$ch = curl_init('https://api.payloqa.com/v1/collections/mobile-money');
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    'Content-Type: application/json',
-    "Authorization: Bearer $payloqa_key",
-]);
-curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-
-$response   = curl_exec($ch);
-$http_code  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$curl_error = curl_error($ch);
-curl_close($ch);
+// Test 3: Can Render reach Groq? (already works)
+$ch3 = curl_init('https://api.groq.com');
+curl_setopt($ch3, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch3, CURLOPT_TIMEOUT, 10);
+$r3 = curl_exec($ch3);
+$e3 = curl_error($ch3);
+curl_close($ch3);
 
 echo json_encode([
-    'http_code'    => $http_code,
-    'curl_error'   => $curl_error,
-    'response'     => $response,
-    'key_set'      => !empty($payloqa_key),
+    'google'  => ['reached' => !empty($r1), 'error' => $e1],
+    'payloqa' => ['reached' => !empty($r2), 'error' => $e2],
+    'groq'    => ['reached' => !empty($r3), 'error' => $e3],
 ]);
