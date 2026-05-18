@@ -14,6 +14,7 @@ $stats['flagged_total']     = (int)$conn->query("SELECT COUNT(*) AS c FROM atten
 $stats['outside_total']     = (int)$conn->query("SELECT COUNT(*) AS c FROM attendance WHERE status='Outside' AND deleted_at IS NULL")->fetch_assoc()['c'];
 $stats['active_sessions']   = (int)$conn->query("SELECT COUNT(*) AS c FROM qr_sessions WHERE ended_at IS NULL")->fetch_assoc()['c'];
 $stats['resolved_issues']   = (int)$conn->query("SELECT COUNT(*) AS c FROM troubleshooting_logs WHERE status='resolved'")->fetch_assoc()['c'];
+$stats['app_downloads']     = (int)$conn->query("SELECT COUNT(*) AS c FROM app_downloads")->fetch_assoc()['c'];
 
 $chart = [];
 for ($i = 13; $i >= 0; $i--) {
