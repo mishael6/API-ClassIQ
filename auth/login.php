@@ -47,7 +47,17 @@ if ($email) {
     $student = $stmt->get_result()->fetch_assoc();
 
     if (!$student) json_error('No student found with this index number.');
-    if (!password_verify($password, $student['password'])) json_error('Incorrect password.');
+
+    // If no password set, use index number as default password
+    if (empty($student['password'])) {
+        if ($password !== $student['index_number']) {
+            json_error('Incorrect password. First time logging in? Use your index number as your password.');
+        }
+    } else {
+        if (!password_verify($password, $student['password'])) {
+            json_error('Incorrect password.');
+        }
+    }
 
     $token = bin2hex(random_bytes(32));
     $upd   = $conn->prepare("UPDATE students SET session_token = ? WHERE id = ?");
