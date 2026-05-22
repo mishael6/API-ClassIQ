@@ -23,6 +23,21 @@ if (!$api_key) json_error('AI service not configured.');
 
 // ── PDF extraction ───────────────────────────────────────────────────────────
 if ($type === 'pdf') {
+    // ── PDF is subscriber-only ──
+    $sub = $conn->prepare("SELECT id FROM ai_subscriptions WHERE student_id = ? AND status = 'active' AND end_date >= CURDATE() LIMIT 1");
+    $sub->bind_param('i', $student_id);
+    $sub->execute();
+    $has_sub = $sub->get_result()->num_rows > 0;
+    if (!$has_sub) {
+        // Also allow free grants
+        $grant = $conn->prepare("SELECT id FROM ai_free_grants WHERE student_id = ? AND (expires_at IS NULL OR expires_at >= CURDATE()) LIMIT 1");
+        $grant->bind_param('i', $student_id);
+        $grant->execute();
+        if ($grant->get_result()->num_rows === 0) {
+            json_error('PDF upload is available for Six subscribers only. Upgrade to unlock!', 403);
+        }
+    }
+
     // Decode PDF bytes
     $pdf_bytes = base64_decode($data_b64);
     if (!$pdf_bytes) json_error('Invalid PDF data.');
