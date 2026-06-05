@@ -55,6 +55,22 @@ function get_bearer_token(): ?string {
     return null;
 }
 
+function require_student(mysqli $conn): array {
+    $token = get_bearer_token();
+    if (!$token) json_error('Unauthorized', 401);
+
+    $stmt = $conn->prepare("SELECT id, name, email FROM students WHERE session_token = ? LIMIT 1");
+    $stmt->bind_param('s', $token);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    if (!$row) json_error('Unauthorized', 401);
+    
+    // Update last_seen
+    $conn->query("UPDATE students SET last_seen = NOW() WHERE id = " . (int)$row['id']);
+    
+    return $row;
+}
+
 function require_auth(mysqli $conn): array {
     $token = get_bearer_token();
     if (!$token) json_error('Unauthorized', 401);

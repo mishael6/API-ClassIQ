@@ -16,6 +16,12 @@ $stats['active_sessions']   = (int)$conn->query("SELECT COUNT(*) AS c FROM qr_se
 $stats['resolved_issues']   = (int)$conn->query("SELECT COUNT(*) AS c FROM troubleshooting_logs WHERE status='resolved'")->fetch_assoc()['c'];
 $stats['app_downloads']     = (int)$conn->query("SELECT COUNT(*) AS c FROM app_downloads")->fetch_assoc()['c'];
 
+// ── Students online (last seen in last 5 minutes) ──
+$stats['students_online'] = (int)$conn->query("
+    SELECT COUNT(*) AS c FROM students
+    WHERE last_seen >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+")->fetch_assoc()['c'];
+
 // ── Mobile app signups (students with a password — registered via mobile app) ──
 $stats['mobile_signups'] = (int)$conn->query("
     SELECT COUNT(*) AS c FROM students
