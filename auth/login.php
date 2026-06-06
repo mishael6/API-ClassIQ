@@ -60,7 +60,7 @@ if ($email) {
     }
 
     $token = bin2hex(random_bytes(32));
-    $upd   = $conn->prepare("UPDATE students SET session_token = ? WHERE id = ?");
+    $upd   = $conn->prepare("UPDATE students SET session_token = ?, last_seen = NOW() WHERE id = ?");
     $upd->bind_param('si', $token, $student['id']);
     $upd->execute();
 
