@@ -22,6 +22,12 @@ $stats['students_online'] = (int)$conn->query("
     WHERE last_seen >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
 ")->fetch_assoc()['c'];
 
+// ── Students without classrep ──
+$stats['students_no_classrep'] = (int)$conn->query("
+    SELECT COUNT(*) AS c FROM students
+    WHERE user_id IS NULL OR user_id = 0
+")->fetch_assoc()['c'];
+
 // ── Mobile app signups (students with a password — registered via mobile app) ──
 $stats['mobile_signups'] = (int)$conn->query("
     SELECT COUNT(*) AS c FROM students
