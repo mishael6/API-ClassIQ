@@ -1,9 +1,25 @@
 <?php
-// api/admin/send_message.php
 require_once __DIR__ . '/../bootstrap.php';
 require_admin($conn);
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error('Method not allowed', 405);
+$method = $_SERVER['REQUEST_METHOD'];
+
+// ── GET — SMS history ─────────────────────────────────────────
+if ($method === 'GET') {
+    $limit  = min((int)($_GET['limit'] ?? 20), 100);
+    $offset = (int)($_GET['offset'] ?? 0);
+
+    $total = $conn->query("SELECT COUNT(*) AS c FROM sms_log")->fetch_assoc()['c'] ?? 0;
+    $rows  = $conn->query("
+        SELECT * FROM sms_log
+        ORDER BY sent_at DESC
+        LIMIT $limit OFFSET $offset
+    ")->fetch_all(MYSQLI_ASSOC);
+
+    json_ok(['logs' => $rows, 'total' => (int)$total]);
+}
+
+if ($method !== 'POST') json_error('Method not allowed', 405);
 
 $body           = get_body();
 $recipient_type = $body['recipient_type'] ?? 'classrep';
@@ -14,21 +30,43 @@ if (!$message) json_error('Message is required.');
 
 // ── Fetch recipients ──────────────────────────────────────────
 $recipients = [];
+
 if ($recipient_type === 'all') {
+    // All approved classreps
     $rows = $conn->query("
-        SELECT id, name, phone FROM users
+        SELECT id, name, phone, 'classrep' AS type FROM users
         WHERE status = 'approved' AND phone != '' AND phone IS NOT NULL
         ORDER BY name
     ")->fetch_all(MYSQLI_ASSOC);
     $recipients = $rows;
-} else {
-    if (!$recipient_id) json_error('Please select a recipient.');
-    $stmt = $conn->prepare("SELECT id, name, phone FROM users WHERE id = ? LIMIT 1");
+
+} elseif ($recipient_type === 'all_students') {
+    // All students
+    $rows = $conn->query("
+        SELECT id, name, phone, 'student' AS type FROM students
+        WHERE phone != '' AND phone IS NOT NULL
+        ORDER BY name
+    ")->fetch_all(MYSQLI_ASSOC);
+    $recipients = $rows;
+
+} elseif ($recipient_type === 'classrep') {
+    if (!$recipient_id) json_error('Please select a class rep.');
+    $stmt = $conn->prepare("SELECT id, name, phone, 'classrep' AS type FROM users WHERE id = ? LIMIT 1");
     $stmt->bind_param('i', $recipient_id);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
-    if (!$row)                json_error('Recipient not found.');
-    if (empty($row['phone'])) json_error("This classrep has no phone number on record.");
+    if (!$row)                json_error('Class rep not found.');
+    if (empty($row['phone'])) json_error('This class rep has no phone number on record.');
+    $recipients[] = $row;
+
+} elseif ($recipient_type === 'student') {
+    if (!$recipient_id) json_error('Please select a student.');
+    $stmt = $conn->prepare("SELECT id, name, phone, 'student' AS type FROM students WHERE id = ? LIMIT 1");
+    $stmt->bind_param('i', $recipient_id);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    if (!$row)                json_error('Student not found.');
+    if (empty($row['phone'])) json_error('This student has no phone number on record.');
     $recipients[] = $row;
 }
 
@@ -41,9 +79,10 @@ $sender_id   = getenv('PAYLOQA_SENDER')      ?: 'ClassIQ';
 
 $sms_sent = 0;
 $errors   = [];
+$msg_trim = substr($message, 0, 155);
 
+// ── Send ──────────────────────────────────────────────────────
 foreach ($recipients as $r) {
-    // Format to E.164
     $phone = preg_replace('/\D/', '', $r['phone']);
     if (strlen($phone) === 10 && str_starts_with($phone, '0')) {
         $phone = '+233' . substr($phone, 1);
@@ -59,7 +98,7 @@ foreach ($recipients as $r) {
     $payload = json_encode([
         'recipient_number'   => $phone,
         'sender_id'          => $sender_id,
-        'message'            => substr($message, 0, 155),
+        'message'            => $msg_trim,
         'usage_message_type' => 'notification',
     ]);
 
@@ -81,23 +120,27 @@ foreach ($recipients as $r) {
     curl_close($ch);
 
     $resp_data = json_decode($resp, true);
+    $ok = $http_code === 200 && ($resp_data['success'] ?? false);
 
-    if ($http_code === 200 && ($resp_data['success'] ?? false)) {
+    if ($ok) {
         $sms_sent++;
     } else {
-        // Recursively extract error message from nested arrays/objects
-        $err = $resp_data['message']
-            ?? $resp_data['error']
-            ?? $resp_data['data']['message']
-            ?? $resp_data['data']['error']
-            ?? null;
-
-        // If still array, JSON encode it so we can read it
+        $err = $resp_data['message'] ?? $resp_data['error'] ?? $resp_data['data']['message'] ?? null;
         if (is_array($err)) $err = json_encode($err);
         if (!$err)          $err = json_encode($resp_data) ?: "HTTP $http_code";
-
         $errors[] = "{$r['name']} ({$phone}): $err";
     }
+
+    // Log every attempt
+    $rname  = $conn->real_escape_string($r['name']);
+    $rtype  = $conn->real_escape_string($r['type'] ?? $recipient_type);
+    $rmsg   = $conn->real_escape_string($msg_trim);
+    $rphone = $conn->real_escape_string($phone);
+    $status = $ok ? 'sent' : 'failed';
+    $conn->query("
+        INSERT INTO sms_log (recipient_name, recipient_type, recipient_phone, message, status, sent_at)
+        VALUES ('$rname', '$rtype', '$rphone', '$rmsg', '$status', NOW())
+    ");
 }
 
 if ($sms_sent === 0) {
