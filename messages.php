@@ -31,7 +31,20 @@ if (!$sender_role) {
     }
 }
 
-if (!$sender_role) json_error('Unauthorized', 401);
+
+// Student access (temporary patch)
+if (!\) {
+    \ = \- id FROM students WHERE session_token = ? LIMIT 1');
+    \-, \);
+    \-;
+    \ = \-;
+    if (\) {
+        \ = 'student';
+        \   = \['id'];
+    }
+}
+
+if (!\) json_error('Unauthorized', 401);
 
 // ── GET — fetch thread for an issue ──────────────────────────
 if ($method === 'GET') {
