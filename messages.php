@@ -114,6 +114,16 @@ if ($method === 'POST') {
         if ($chk->get_result()->num_rows === 0) json_error('Access denied.', 403);
     }
 
+    // Verify issue is not closed
+    $chk_status = $conn->prepare("SELECT status FROM troubleshooting_logs WHERE id = ? LIMIT 1");
+    $chk_status->bind_param('i', $issue_id);
+    $chk_status->execute();
+    $issue_status = $chk_status->get_result()->fetch_assoc()['status'] ?? '';
+    
+    if ($issue_status === 'closed') {
+        json_error('Cannot reply to a closed issue.');
+    }
+
     $safe_message = $conn->real_escape_string($message);
     $conn->query("
         INSERT INTO messages (issue_id, sender_role, sender_id, message, created_at)
