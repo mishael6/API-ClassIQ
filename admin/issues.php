@@ -12,12 +12,14 @@ if ($method === 'GET') {
 
     $rows = $conn->query("
         SELECT t.id, t.message, t.status, t.created_at,
-               u.name  AS classrep_name,
-               u.email AS classrep_email,
-               u.id    AS classrep_id,
-               (SELECT COUNT(*) FROM messages m WHERE m.issue_id = t.id AND m.is_read = 0 AND m.sender_role = 'classrep') AS unread_count
+               COALESCE(t.user_type, 'classrep') AS user_type,
+               COALESCE(u.name, s.name)  AS classrep_name,
+               COALESCE(u.email, s.email) AS classrep_email,
+               COALESCE(u.id, s.id)      AS classrep_id,
+               (SELECT COUNT(*) FROM messages m WHERE m.issue_id = t.id AND m.is_read = 0 AND m.sender_role IN ('classrep','student')) AS unread_count
         FROM troubleshooting_logs t
-        LEFT JOIN users u ON u.id = t.user_id
+        LEFT JOIN users u ON u.id = t.user_id AND (t.user_type IS NULL OR t.user_type = 'classrep')
+        LEFT JOIN students s ON s.id = t.user_id AND t.user_type = 'student'
         $where
         ORDER BY t.created_at DESC
         LIMIT 200

@@ -1,11 +1,11 @@
 <?php
-// api/messages.php — shared by admin and classrep
+// api/messages.php — shared by admin, classrep, and student
 require_once __DIR__ . '/bootstrap.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 $token  = get_bearer_token();
 
-// Determine who is calling — admin or classrep
+// Determine who is calling — admin, classrep, or student
 $sender_role = null;
 $sender_id   = null;
 
@@ -31,28 +31,27 @@ if (!$sender_role) {
     }
 }
 
-
-// Student access (temporary patch)
-if (!\) {
-    \ = \- id FROM students WHERE session_token = ? LIMIT 1');
-    \-, \);
-    \-;
-    \ = \-;
-    if (\) {
-        \ = 'student';
-        \   = \['id'];
+// Try student
+if (!$sender_role) {
+    $s = $conn->prepare("SELECT id FROM students WHERE session_token = ? LIMIT 1");
+    $s->bind_param('s', $token);
+    $s->execute();
+    $student = $s->get_result()->fetch_assoc();
+    if ($student) {
+        $sender_role = 'student';
+        $sender_id   = $student['id'];
     }
 }
 
-if (!\) json_error('Unauthorized', 401);
+if (!$sender_role) json_error('Unauthorized', 401);
 
 // ── GET — fetch thread for an issue ──────────────────────────
-if ($method === 'GET') {
+if ($method === 'GET' && !isset($_GET['unread_count'])) {
     $issue_id = (int)($_GET['issue_id'] ?? 0);
     if (!$issue_id) json_error('Issue ID required.');
 
-    // Verify access — classrep can only see their own issues
-    if ($sender_role === 'classrep') {
+    // Verify access — classrep/student can only see their own issues
+    if ($sender_role === 'classrep' || $sender_role === 'student') {
         $chk = $conn->prepare("SELECT id FROM troubleshooting_logs WHERE id = ? AND user_id = ? LIMIT 1");
         $chk->bind_param('ii', $issue_id, $sender_id);
         $chk->execute();
@@ -68,18 +67,26 @@ if ($method === 'GET') {
     ")->fetch_all(MYSQLI_ASSOC);
 
     // Mark messages as read for the current viewer
-    $opposite_role = $sender_role === 'admin' ? 'classrep' : 'admin';
-    $conn->query("
-        UPDATE messages SET is_read = 1
-        WHERE issue_id = $issue_id AND sender_role = '$opposite_role' AND is_read = 0
-    ");
+    if ($sender_role === 'admin') {
+        $conn->query("
+            UPDATE messages SET is_read = 1
+            WHERE issue_id = $issue_id AND sender_role IN ('classrep','student') AND is_read = 0
+        ");
+    } else {
+        $conn->query("
+            UPDATE messages SET is_read = 1
+            WHERE issue_id = $issue_id AND sender_role = 'admin' AND is_read = 0
+        ");
+    }
 
     // Fetch issue info
     $issue_stmt = $conn->prepare("
-        SELECT t.id, t.message, t.status, t.created_at,
-               u.name AS classrep_name, u.email AS classrep_email
+        SELECT t.id, t.message, t.status, t.created_at, t.user_type,
+               COALESCE(u.name, s.name) AS reporter_name,
+               COALESCE(u.email, s.email) AS reporter_email
         FROM troubleshooting_logs t
-        LEFT JOIN users u ON u.id = t.user_id
+        LEFT JOIN users u ON u.id = t.user_id AND (t.user_type IS NULL OR t.user_type = 'classrep')
+        LEFT JOIN students s ON s.id = t.user_id AND t.user_type = 'student'
         WHERE t.id = ?
         LIMIT 1
     ");
@@ -99,8 +106,8 @@ if ($method === 'POST') {
     if (!$issue_id) json_error('Issue ID required.');
     if (!$message)  json_error('Message cannot be empty.');
 
-    // Verify classrep can only post to their own issues
-    if ($sender_role === 'classrep') {
+    // Verify classrep/student can only post to their own issues
+    if ($sender_role === 'classrep' || $sender_role === 'student') {
         $chk = $conn->prepare("SELECT id FROM troubleshooting_logs WHERE id = ? AND user_id = ? LIMIT 1");
         $chk->bind_param('ii', $issue_id, $sender_id);
         $chk->execute();
@@ -113,8 +120,8 @@ if ($method === 'POST') {
         VALUES ($issue_id, '$sender_role', $sender_id, '$safe_message', NOW())
     ");
 
-    // If issue was resolved, reopen it when classrep replies
-    if ($sender_role === 'classrep') {
+    // If issue was resolved, reopen it when classrep/student replies
+    if ($sender_role === 'classrep' || $sender_role === 'student') {
         $conn->query("UPDATE troubleshooting_logs SET status = 'pending' WHERE id = $issue_id AND status = 'resolved'");
     }
 
@@ -123,18 +130,22 @@ if ($method === 'POST') {
 
 // ── GET unread count (for sidebar badge) ─────────────────────
 if ($method === 'GET' && isset($_GET['unread_count'])) {
-    $opposite = $sender_role === 'admin' ? 'classrep' : 'admin';
-
     if ($sender_role === 'classrep') {
         $count = $conn->query("
             SELECT COUNT(*) AS c FROM messages m
             JOIN troubleshooting_logs t ON t.id = m.issue_id
             WHERE t.user_id = $sender_id AND m.sender_role = 'admin' AND m.is_read = 0
         ")->fetch_assoc()['c'];
+    } elseif ($sender_role === 'student') {
+        $count = $conn->query("
+            SELECT COUNT(*) AS c FROM messages m
+            JOIN troubleshooting_logs t ON t.id = m.issue_id
+            WHERE t.user_id = $sender_id AND t.user_type = 'student' AND m.sender_role = 'admin' AND m.is_read = 0
+        ")->fetch_assoc()['c'];
     } else {
         $count = $conn->query("
             SELECT COUNT(*) AS c FROM messages m
-            WHERE m.sender_role = 'classrep' AND m.is_read = 0
+            WHERE m.sender_role IN ('classrep','student') AND m.is_read = 0
         ")->fetch_assoc()['c'];
     }
 
