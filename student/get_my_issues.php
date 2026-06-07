@@ -1,7 +1,7 @@
 <?php
 // api/student/get_my_issues.php
 require_once __DIR__ . '/../bootstrap.php';
-$user = require_auth($conn);
+$user = require_student($conn);
 $student_id = $user['id'];
 
 // Get issues reported by this student
