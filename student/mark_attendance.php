@@ -60,7 +60,7 @@ if (!$student) json_error('Student not found.');
 $dup = $conn->prepare("SELECT 1 FROM attendance WHERE index_number = ? AND attendance_date = CURDATE() AND classrep_id = ? AND lecture_name = ? LIMIT 1");
 $dup->bind_param('sis', $index_number, $classrep_id, $lecture_name);
 $dup->execute();
-if ($dup->get_result()->num_rows > 0) json_error('You have already marked attendance for this lecture.');
+if ($dup->get_result()->num_rows > 0) json_error('You have already marked attendance for this lecture. Download the mobile app to track your attendance history and report any issues to the admin');
 
 // Device check — flag if same device used by another student
 $location_status = 'Present';
