@@ -366,8 +366,9 @@ function encrypt_push_payload(string $payload, string $p256dh_b64, string $auth_
     $user_key = openssl_pkey_get_public($user_pem);
     if (!$user_key) return null;
 
-    $shared = '';
-    if (!openssl_pkey_derive($user_key, $local_key, $shared)) return null;
+    // PHP 8+: returns shared secret; 3rd arg is key length in bytes (32 for P-256)
+    $shared = openssl_pkey_derive($user_key, $local_key, 32);
+    if ($shared === false) return null;
 
     $salt         = random_bytes(16);
     $key_info     = "WebPush: info\x00" . $user_public . $local_public;
