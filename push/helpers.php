@@ -529,7 +529,7 @@ function broadcast_push(mysqli $conn, string $title, string $body, ?string $role
     $payload = [
         'title' => $title,
         'body'  => $body,
-        'icon'  => '/assets/icon.png',
+        'icon'  => '/assets/user-verification.png',
         'url'   => '/',
     ];
 
