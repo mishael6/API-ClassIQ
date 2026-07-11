@@ -53,8 +53,16 @@ $conn->query("SET time_zone = '+00:00'");
 
 // ── Auth helpers ──────────────────────────────────────────────
 function get_bearer_token(): ?string {
-    $h = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-    if (preg_match('/Bearer\s+(.+)/', $h, $m)) return $m[1];
+    $h = $_SERVER['HTTP_AUTHORIZATION']
+      ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+      ?? '';
+
+    if (!$h && function_exists('apache_request_headers')) {
+        $headers = apache_request_headers();
+        $h = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+    }
+
+    if (preg_match('/Bearer\s+(.+)/i', $h, $m)) return trim($m[1]);
     return null;
 }
 

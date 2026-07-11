@@ -21,7 +21,9 @@ $result = $role === 'all'
     : broadcast_push($conn, $title, $body_text, $role, null, 'manual');
 
 if ($result['total'] === 0) {
-    json_error('No active push subscriptions found.');
+    json_error(
+        'No active push subscriptions found. A student must open the ClassIQ PWA from their Home Screen, log in, go to Settings, and enable Push Notifications (tap Allow). Check the count at the top of this page — it should show 1+ before sending.'
+    );
 }
 
 json_ok([

@@ -37,9 +37,16 @@ if ($row) {
     }
 }
 
-if (!$user_id) json_error('Unauthorized', 401);
+if (!$user_id) {
+    json_error('Session expired. Log out and log in again, then enable push.', 401);
+}
 
 $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500);
 save_push_subscription($conn, $user_id, $user_role, $sub, $ua);
 
-json_ok(['message' => 'Push notifications enabled.']);
+$count = (int)($conn->query("SELECT COUNT(*) AS c FROM push_subscriptions")->fetch_assoc()['c'] ?? 0);
+
+json_ok([
+    'message'              => 'Push notifications enabled.',
+    'active_subscriptions' => $count,
+]);

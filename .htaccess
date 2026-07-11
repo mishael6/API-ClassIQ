@@ -1,6 +1,10 @@
 Options -Indexes
 RewriteEngine On
 
+# Pass Authorization header to PHP (required for Bearer token auth on some hosts)
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
 # Handle OPTIONS preflight
 RewriteCond %{REQUEST_METHOD} OPTIONS
 RewriteRule ^(.*)$ $1 [R=200,L]
