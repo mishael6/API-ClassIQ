@@ -383,6 +383,7 @@ function encrypt_push_payload(string $payload, string $p256dh_b64, string $auth_
     // PHP 8+: returns shared secret; 3rd arg is key length in bytes (32 for P-256)
     $shared = openssl_pkey_derive($user_key, $local_key, 32);
     if ($shared === false) return null;
+    $shared = str_pad($shared, 32, "\x00", STR_PAD_LEFT);
 
     $salt         = random_bytes(16);
     $key_info     = "WebPush: info\x00" . $user_public . $local_public;
@@ -390,15 +391,15 @@ function encrypt_push_payload(string $payload, string $p256dh_b64, string $auth_
     $cek          = hkdf($ikm, 16, "Content-Encoding: aes128gcm\x00", $salt);
     $nonce        = hkdf($ikm, 12, "Content-Encoding: nonce\x00", $salt);
 
-    $record_size  = 4096;
-    $pad_len      = 0;
-    $plain        = $payload . str_repeat("\x00", $pad_len) . chr($pad_len);
-    $tag          = '';
-    $ciphertext   = openssl_encrypt($plain, 'aes-128-gcm', $cek, OPENSSL_RAW_DATA, $nonce, $tag, '');
+    // RFC 8291 aes128gcm: plaintext + delimiter 0x02 (NOT 0x00 — wrong delimiter = silent drop)
+    $plain      = $payload . "\x02";
+    $tag        = '';
+    $ciphertext = openssl_encrypt($plain, 'aes-128-gcm', $cek, OPENSSL_RAW_DATA, $nonce, $tag, '');
     if ($ciphertext === false) return null;
 
-    $rs_bytes = pack('N', $record_size);
-    $body     = $salt . $rs_bytes . chr(strlen($local_public)) . $local_public . $ciphertext . $tag;
+    $record_size = 4096;
+    $rs_bytes    = pack('N', $record_size);
+    $body        = $salt . $rs_bytes . chr(strlen($local_public)) . $local_public . $ciphertext . $tag;
 
     return ['body' => $body, 'salt' => $salt, 'local_public' => $local_public];
 }
