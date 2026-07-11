@@ -1,9 +1,9 @@
 FROM php:8.2-fpm-alpine
 
-# Install nginx
+# Install nginx + openssl for Web Push
 RUN apk add --no-cache nginx
 
-# Install mysqli extension
+# Install mysqli + ensure openssl is available
 RUN docker-php-ext-install mysqli
 
 # Nginx config

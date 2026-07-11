@@ -25,8 +25,11 @@ register_shutdown_function(function () {
 // ── CORS ──────────────────────────────────────────────────────
 $allowed_origins = [
     'https://class-iq.netlify.app',
+    'https://app-class-iq.netlify.app',
+    'https://mobile-classiq.netlify.app',
     'http://localhost:5173',
     'http://localhost:3000',
+    'http://localhost:8081',
 ];
 
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
