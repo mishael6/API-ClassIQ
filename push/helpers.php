@@ -101,6 +101,27 @@ function sanitize_vapid_env(string $value): string {
     return trim($value, " \t\n\r\0\x0B\"'");
 }
 
+function vapid_public_from_private(string $private_b64): string {
+    $pem = vapid_private_to_pem($private_b64);
+    if (!$pem) return '';
+    $key = openssl_pkey_get_private($pem);
+    if (!$key) return '';
+    $details = openssl_pkey_get_details($key);
+    if (!isset($details['ec']['x'], $details['ec']['y'])) return '';
+
+    $pub = "\x04"
+         . str_pad($details['ec']['x'], 32, "\x00", STR_PAD_LEFT)
+         . str_pad($details['ec']['y'], 32, "\x00", STR_PAD_LEFT);
+    return b64url_encode($pub);
+}
+
+function vapid_keys_are_pair(string $public_b64, string $private_b64): bool {
+    if (!vapid_public_key_valid($public_b64) || !vapid_private_key_valid($private_b64)) {
+        return false;
+    }
+    return vapid_public_from_private($private_b64) === $public_b64;
+}
+
 function get_vapid_keys(): array {
     // Known-good fallback pair (web-push standard test keys)
     $defaults = [
@@ -113,16 +134,38 @@ function get_vapid_keys(): array {
     $private = sanitize_vapid_env(getenv('VAPID_PRIVATE_KEY') ?: '');
     $subject = sanitize_vapid_env(getenv('VAPID_SUBJECT')   ?: '');
 
-    if (!$public || !vapid_public_key_valid($public)) {
-        $public  = $defaults['public'];
-        $private = $defaults['private'];
-    } elseif (!$private || !vapid_private_key_valid($private)) {
-        $private = $defaults['private'];
+    $using_defaults = false;
+    if (!vapid_keys_are_pair($public, $private)) {
+        $public         = $defaults['public'];
+        $private        = $defaults['private'];
+        $using_defaults = true;
     }
 
     if (!$subject) $subject = $defaults['subject'];
 
-    return ['public' => $public, 'private' => $private, 'subject' => $subject];
+    return [
+        'public'         => $public,
+        'private'        => $private,
+        'subject'        => $subject,
+        'using_defaults' => $using_defaults,
+        'pair_valid'     => true,
+    ];
+}
+
+function push_send_error_hint(int $code, string $body = ''): string {
+    if ($code === 401) {
+        return 'VAPID keys do not match this device. In Render, set BOTH VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY from Admin → Generate VAPID Keys (paste values only), redeploy, then have the student disable and re-enable push in Settings.';
+    }
+    if ($code === 410 || $code === 404) {
+        return 'Subscription expired. The student should turn push off and on again in Settings.';
+    }
+    if ($code === 0) {
+        return 'Could not reach the push service (network error).';
+    }
+    $snippet = trim(substr($body, 0, 120));
+    return $snippet
+        ? "Push service rejected the message (HTTP $code): $snippet"
+        : "Push service rejected the message (HTTP $code).";
 }
 
 function vapid_private_to_pem(string $private_b64): string {
@@ -234,21 +277,27 @@ function encrypt_push_payload(string $payload, string $p256dh_b64, string $auth_
     return ['body' => $body, 'salt' => $salt, 'local_public' => $local_public];
 }
 
-function send_web_push(array $subscription, array $payload_data, array $vapid): bool {
+function send_web_push(array $subscription, array $payload_data, array $vapid): array {
     $endpoint = $subscription['endpoint'] ?? '';
     $p256dh   = $subscription['keys']['p256dh'] ?? '';
     $auth     = $subscription['keys']['auth'] ?? '';
-    if (!$endpoint || !$p256dh || !$auth) return false;
+    if (!$endpoint || !$p256dh || !$auth) {
+        return ['ok' => false, 'http_code' => 0, 'hint' => 'Invalid subscription data in database.'];
+    }
 
     $parsed   = parse_url($endpoint);
     $audience = ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? '');
 
     $jwt = create_vapid_jwt($audience, $vapid['subject'], $vapid['private']);
-    if (!$jwt) return false;
+    if (!$jwt) {
+        return ['ok' => false, 'http_code' => 0, 'hint' => 'Could not sign VAPID token. Check VAPID_PRIVATE_KEY on Render.'];
+    }
 
     $payload_json = json_encode($payload_data);
     $encrypted    = encrypt_push_payload($payload_json, $p256dh, $auth);
-    if (!$encrypted) return false;
+    if (!$encrypted) {
+        return ['ok' => false, 'http_code' => 0, 'hint' => 'Could not encrypt notification payload.'];
+    }
 
     $ch = curl_init($endpoint);
     curl_setopt_array($ch, [
@@ -259,16 +308,31 @@ function send_web_push(array $subscription, array $payload_data, array $vapid): 
             'Content-Type: application/octet-stream',
             'Content-Encoding: aes128gcm',
             'TTL: 86400',
+            'Urgency: normal',
             "Authorization: vapid t=$jwt, k={$vapid['public']}",
         ],
         CURLOPT_TIMEOUT => 15,
     ]);
 
-    curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $response  = curl_exec($ch);
+    $http_code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curl_err  = curl_error($ch);
     curl_close($ch);
 
-    return in_array($http_code, [200, 201, 204]);
+    if (in_array($http_code, [200, 201, 204])) {
+        return ['ok' => true, 'http_code' => $http_code];
+    }
+
+    $hint = $curl_err
+        ? "Network error: $curl_err"
+        : push_send_error_hint($http_code, (string)$response);
+
+    return [
+        'ok'        => false,
+        'http_code' => $http_code,
+        'hint'      => $hint,
+        'expired'   => in_array($http_code, [404, 410]),
+    ];
 }
 
 function save_push_subscription(mysqli $conn, int $user_id, string $user_role, array $sub, string $ua = ''): void {
@@ -321,6 +385,7 @@ function broadcast_push(mysqli $conn, string $title, string $body, ?string $role
 
     $sent   = 0;
     $failed = 0;
+    $errors = [];
     $payload = [
         'title' => $title,
         'body'  => $body,
@@ -333,13 +398,19 @@ function broadcast_push(mysqli $conn, string $title, string $body, ?string $role
             'endpoint' => $row['endpoint'],
             'keys'     => ['p256dh' => $row['p256dh'], 'auth' => $row['auth']],
         ];
-        if (send_web_push($sub, $payload, $vapid)) {
+        $push_result = send_web_push($sub, $payload, $vapid);
+        if (!empty($push_result['ok'])) {
             $sent++;
         } else {
             $failed++;
-            $del = $conn->prepare("DELETE FROM push_subscriptions WHERE endpoint = ?");
-            $del->bind_param('s', $row['endpoint']);
-            $del->execute();
+            if (!empty($push_result['hint'])) {
+                $errors[] = $push_result['hint'];
+            }
+            if (!empty($push_result['expired'])) {
+                $del = $conn->prepare("DELETE FROM push_subscriptions WHERE endpoint = ?");
+                $del->bind_param('s', $row['endpoint']);
+                $del->execute();
+            }
         }
     }
 
@@ -349,7 +420,12 @@ function broadcast_push(mysqli $conn, string $title, string $body, ?string $role
     $conn->query("INSERT INTO push_log (title, body, sent_count, failed_count, message_type, sent_at)
                   VALUES ('$title_e', '$body_e', $sent, $failed, '$type_e', NOW())");
 
-    return ['sent' => $sent, 'failed' => $failed, 'total' => count($rows)];
+    return [
+        'sent'   => $sent,
+        'failed' => $failed,
+        'total'  => count($rows),
+        'errors' => array_values(array_unique($errors)),
+    ];
 }
 
 function notify_student_push(mysqli $conn, int $student_id, string $title, string $body, string $type = 'attendance'): void {

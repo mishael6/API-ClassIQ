@@ -26,10 +26,18 @@ if ($result['total'] === 0) {
     );
 }
 
+$message = "Push sent to {$result['sent']} of {$result['total']} devices.";
+if ($result['failed']) {
+    $message .= " {$result['failed']} failed.";
+    if (!empty($result['errors'][0])) {
+        $message .= ' ' . $result['errors'][0];
+    }
+}
+
 json_ok([
-    'message' => "Push sent to {$result['sent']} of {$result['total']} devices." .
-                 ($result['failed'] ? " {$result['failed']} failed." : ''),
+    'message' => $message,
     'sent'    => $result['sent'],
     'failed'  => $result['failed'],
     'total'   => $result['total'],
+    'errors'  => $result['errors'] ?? [],
 ]);
