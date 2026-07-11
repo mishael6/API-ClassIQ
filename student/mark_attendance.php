@@ -87,4 +87,10 @@ if (!$ins->execute()) json_error('Failed to save attendance: ' . $ins->error);
 $message = 'Attendance marked successfully.';
 if ($location_status === 'Flagged') $message .= ' (⚠️ flagged for review)';
 
+// Push notification to student (best-effort, non-blocking)
+try {
+    require_once __DIR__ . '/../push/automated.php';
+    send_attendance_push($conn, $student, $lecture_name, $location_status);
+} catch (Throwable $e) { /* push is optional */ }
+
 json_ok(['message' => $message, 'status' => $location_status]);

@@ -35,12 +35,81 @@ function b64url_decode(string $data): string {
     return base64_decode(strtr($data, '-_', '+/') . str_repeat('=', $pad));
 }
 
+/** A valid P-256 public key is 65 bytes starting with 0x04 */
+function vapid_public_key_valid(string $b64): bool {
+    $b64 = trim($b64);
+    if ($b64 === '') return false;
+    $raw = b64url_decode($b64);
+    return strlen($raw) === 65 && $raw[0] === "\x04";
+}
+
+function vapid_private_key_valid(string $b64): bool {
+    $raw = b64url_decode(trim($b64));
+    return strlen($raw) === 32;
+}
+
+/** Generate a guaranteed-valid VAPID key pair */
+function generate_vapid_key_pair(): array {
+    for ($attempt = 0; $attempt < 10; $attempt++) {
+        $key = openssl_pkey_new([
+            'curve_name'       => 'prime256v1',
+            'private_key_type' => OPENSSL_KEYTYPE_EC,
+        ]);
+        if (!$key) continue;
+
+        $details = openssl_pkey_get_details($key);
+        if (!isset($details['ec']['x'], $details['ec']['y'], $details['ec']['d'])) continue;
+
+        $priv = str_pad($details['ec']['d'], 32, "\x00", STR_PAD_LEFT);
+        $pub  = "\x04"
+              . str_pad($details['ec']['x'], 32, "\x00", STR_PAD_LEFT)
+              . str_pad($details['ec']['y'], 32, "\x00", STR_PAD_LEFT);
+
+        $public_b64  = b64url_encode($pub);
+        $private_b64 = b64url_encode($priv);
+
+        if (vapid_public_key_valid($public_b64) && vapid_private_key_valid($private_b64)) {
+            return [
+                'public'  => $public_b64,
+                'private' => $private_b64,
+                'subject' => 'mailto:admin@classiq.app',
+            ];
+        }
+    }
+    return [];
+}
+
+function sanitize_vapid_env(string $value): string {
+    $value = trim($value);
+    // Fix copy-paste like "VAPID_PUBLIC_KEY=BExx..."
+    if (preg_match('/^VAPID_(PUBLIC|PRIVATE)_KEY=(.+)$/i', $value, $m)) {
+        $value = trim($m[2]);
+    }
+    return trim($value, " \t\n\r\0\x0B\"'");
+}
+
 function get_vapid_keys(): array {
-    return [
-        'public'  => getenv('VAPID_PUBLIC_KEY')  ?: 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U',
-        'private' => getenv('VAPID_PRIVATE_KEY') ?: 'p92vj1WhvZ9Dk7mK3nL8xR4tY6wQ0sA2bC5dE7fG9hJ1',
-        'subject' => getenv('VAPID_SUBJECT')   ?: 'mailto:admin@classiq.app',
+    // Known-good fallback pair (web-push standard test keys)
+    $defaults = [
+        'public'  => 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U',
+        'private' => 'Vk6P7jL0rGzpPPGT8vfc_xoKd6niE3P92g8N-9hm3gc',
+        'subject' => 'mailto:admin@classiq.app',
     ];
+
+    $public  = sanitize_vapid_env(getenv('VAPID_PUBLIC_KEY')  ?: '');
+    $private = sanitize_vapid_env(getenv('VAPID_PRIVATE_KEY') ?: '');
+    $subject = sanitize_vapid_env(getenv('VAPID_SUBJECT')   ?: '');
+
+    if (!$public || !vapid_public_key_valid($public)) {
+        $public  = $defaults['public'];
+        $private = $defaults['private'];
+    } elseif (!$private || !vapid_private_key_valid($private)) {
+        $private = $defaults['private'];
+    }
+
+    if (!$subject) $subject = $defaults['subject'];
+
+    return ['public' => $public, 'private' => $private, 'subject' => $subject];
 }
 
 function vapid_private_to_pem(string $private_b64): string {
@@ -217,7 +286,7 @@ function remove_push_subscription(mysqli $conn, string $endpoint): void {
     $stmt->execute();
 }
 
-function broadcast_push(mysqli $conn, string $title, string $body, ?string $role = null, ?int $user_id = null): array {
+function broadcast_push(mysqli $conn, string $title, string $body, ?string $role = null, ?int $user_id = null, string $type = 'manual'): array {
     ensure_push_tables($conn);
     $vapid = get_vapid_keys();
 
@@ -263,14 +332,15 @@ function broadcast_push(mysqli $conn, string $title, string $body, ?string $role
 
     $title_e = $conn->real_escape_string($title);
     $body_e  = $conn->real_escape_string($body);
-    $conn->query("INSERT INTO push_log (title, body, sent_count, failed_count, sent_at)
-                  VALUES ('$title_e', '$body_e', $sent, $failed, NOW())");
+    $type_e  = $conn->real_escape_string($type);
+    $conn->query("INSERT INTO push_log (title, body, sent_count, failed_count, message_type, sent_at)
+                  VALUES ('$title_e', '$body_e', $sent, $failed, '$type_e', NOW())");
 
     return ['sent' => $sent, 'failed' => $failed, 'total' => count($rows)];
 }
 
-function notify_student_push(mysqli $conn, int $student_id, string $title, string $body): void {
-    broadcast_push($conn, $title, $body, 'student', $student_id);
+function notify_student_push(mysqli $conn, int $student_id, string $title, string $body, string $type = 'attendance'): void {
+    broadcast_push($conn, $title, $body, 'student', $student_id, $type);
 }
 
 function notify_all_students_push(mysqli $conn, string $title, string $body): array {

@@ -72,18 +72,6 @@ if (empty($recipients)) json_error('No recipients with phone numbers found.');
 
 $result = send_sms_in_batches($conn, $recipients, $message, $recipient_type);
 
-// Send push alongside SMS for bulk student messages
-$push_result = ['sent' => 0];
-if (in_array($recipient_type, ['all_students', 'all'])) {
-    try {
-        require_once __DIR__ . '/../push/helpers.php';
-        $push_role = $recipient_type === 'all_students' ? 'student' : null;
-        $push_result = $push_role
-            ? notify_all_students_push($conn, 'ClassIQ', substr($message, 0, 155))
-            : broadcast_push($conn, 'ClassIQ', substr($message, 0, 155));
-    } catch (Throwable $e) { /* best effort */ }
-}
-
 if ($result['sms_sent'] === 0 && !empty($result['errors'])) {
     json_error('Failed to send. ' . implode(' | ', array_slice($result['errors'], 0, 3)));
 }
@@ -91,11 +79,9 @@ if ($result['sms_sent'] === 0 && !empty($result['errors'])) {
 $failed = count($result['errors']);
 
 json_ok([
-    'message'  => "{$result['sms_sent']} SMS sent successfully." . ($failed ? " {$failed} failed." : '') .
-                  ($push_result['sent'] ? " Push: {$push_result['sent']} devices." : ''),
+    'message'  => "{$result['sms_sent']} SMS sent successfully." . ($failed ? " {$failed} failed." : ''),
     'sms_sent' => $result['sms_sent'],
     'total'    => $result['total'] ?? count($recipients),
     'batches'  => $result['batches'],
     'errors'   => array_slice($result['errors'], 0, 20),
-    'push_sent' => $push_result['sent'] ?? 0,
 ]);

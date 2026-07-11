@@ -17,8 +17,8 @@ $allowed_roles = ['student', 'classrep', 'all'];
 if (!in_array($role, $allowed_roles)) json_error('Invalid role.');
 
 $result = $role === 'all'
-    ? broadcast_push($conn, $title, $body_text)
-    : broadcast_push($conn, $title, $body_text, $role);
+    ? broadcast_push($conn, $title, $body_text, null, null, 'manual')
+    : broadcast_push($conn, $title, $body_text, $role, null, 'manual');
 
 if ($result['total'] === 0) {
     json_error('No active push subscriptions found.');

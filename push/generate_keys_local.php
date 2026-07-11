@@ -1,7 +1,7 @@
 <?php
 /**
  * Generate VAPID keys locally — no login required.
- * Run from terminal:  php api/push/generate_keys_local.php
+ * Run: php api/push/generate_keys_local.php
  */
 function b64url_encode(string $data): string {
     return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
@@ -20,11 +20,19 @@ $pub     = "\x04" . str_pad($details['ec']['x'], 32, "\x00", STR_PAD_LEFT)
 
 $public_key  = b64url_encode($pub);
 $private_key = b64url_encode($priv);
-$subject     = 'mailto:admin@classiq.app';
 
-echo "\n=== ClassIQ VAPID Keys ===\n\n";
-echo "Copy these into Render → Environment Variables:\n\n";
-echo "VAPID_PUBLIC_KEY\n  $public_key\n\n";
-echo "VAPID_PRIVATE_KEY\n  $private_key\n\n";
-echo "VAPID_SUBJECT\n  $subject\n\n";
-echo "Keep the PRIVATE key secret. Never put it in the app or GitHub.\n\n";
+// Validate
+$decoded = base64_decode(strtr($public_key, '-_', '+/') . str_repeat('=', (4 - strlen($public_key) % 4) % 4));
+if (strlen($decoded) !== 65 || $decoded[0] !== "\x04") {
+    fwrite(STDERR, "Error: Generated public key failed validation.\n");
+    exit(1);
+}
+
+$subject = 'mailto:admin@classiq.app';
+
+echo "\n=== ClassIQ VAPID Keys (validated) ===\n\n";
+echo "Add these in Render → Environment → Add Variable:\n\n";
+echo "Key:   VAPID_PUBLIC_KEY\nValue: $public_key\n\n";
+echo "Key:   VAPID_PRIVATE_KEY\nValue: $private_key\n\n";
+echo "Key:   VAPID_SUBJECT\nValue: $subject\n\n";
+echo "IMPORTANT: Paste only the Value, not 'VAPID_PUBLIC_KEY='.\n\n";
