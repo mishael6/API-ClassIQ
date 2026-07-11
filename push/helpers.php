@@ -22,8 +22,11 @@ function ensure_push_tables(mysqli $conn): void {
         body         TEXT         NOT NULL,
         sent_count   INT          NOT NULL DEFAULT 0,
         failed_count INT          NOT NULL DEFAULT 0,
+        message_type VARCHAR(20)  NULL DEFAULT 'manual',
         sent_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $conn->query("ALTER TABLE push_log ADD COLUMN IF NOT EXISTS message_type VARCHAR(20) NULL DEFAULT 'manual'");
 }
 
 function b64url_encode(string $data): string {
