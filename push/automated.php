@@ -15,8 +15,6 @@ function ensure_push_automation_tables(mysqli $conn): void {
         sent_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uq_date_type (sent_date, message_type)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-    $conn->query("ALTER TABLE push_log ADD COLUMN IF NOT EXISTS message_type VARCHAR(20) NULL DEFAULT 'manual'");
 }
 
 function daily_push_already_sent(mysqli $conn, string $type): bool {

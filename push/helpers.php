@@ -1,6 +1,16 @@
 <?php
 // api/push/helpers.php — Web Push subscription storage & sending (no composer)
 
+/** Add a column only if it does not exist (works on older MySQL/MariaDB). */
+function ensure_column(mysqli $conn, string $table, string $column, string $definition): void {
+    $safe_table = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+    $safe_col   = preg_replace('/[^a-zA-Z0-9_]/', '', $column);
+    $result     = $conn->query("SHOW COLUMNS FROM `{$safe_table}` LIKE '{$safe_col}'");
+    if ($result && $result->num_rows === 0) {
+        $conn->query("ALTER TABLE `{$safe_table}` ADD COLUMN {$definition}");
+    }
+}
+
 function ensure_push_tables(mysqli $conn): void {
     $conn->query("CREATE TABLE IF NOT EXISTS push_subscriptions (
         id            INT AUTO_INCREMENT PRIMARY KEY,
@@ -26,7 +36,7 @@ function ensure_push_tables(mysqli $conn): void {
         sent_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-    $conn->query("ALTER TABLE push_log ADD COLUMN IF NOT EXISTS message_type VARCHAR(20) NULL DEFAULT 'manual'");
+    ensure_column($conn, 'push_log', 'message_type', "message_type VARCHAR(20) NULL DEFAULT 'manual'");
 }
 
 function b64url_encode(string $data): string {

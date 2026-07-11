@@ -7,7 +7,6 @@ require_admin($conn);
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') json_error('Method not allowed', 405);
 
 ensure_push_tables($conn);
-$conn->query("ALTER TABLE push_log ADD COLUMN IF NOT EXISTS message_type VARCHAR(20) NULL DEFAULT 'manual'");
 
 $limit  = min((int)($_GET['limit'] ?? 20), 100);
 $offset = (int)($_GET['offset'] ?? 0);
