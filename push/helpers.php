@@ -98,13 +98,179 @@ function sanitize_vapid_env(string $value): string {
     if (preg_match('/^VAPID_(PUBLIC|PRIVATE)_KEY=(.+)$/i', $value, $m)) {
         $value = trim($m[2]);
     }
-    return trim($value, " \t\n\r\0\x0B\"'");
+    $value = trim($value, " \t\n\r\0\x0B\"'");
+    // Strip accidental spaces/newlines inside the key value
+    return preg_replace('/\s+/', '', $value);
 }
 
-function vapid_public_from_private(string $private_b64): string {
-    $pem = vapid_private_to_pem($private_b64);
-    if (!$pem) return '';
-    $key = openssl_pkey_get_private($pem);
+function asn1_length(int $length): string {
+    if ($length < 0x80) {
+        return chr($length);
+    }
+    $bytes = '';
+    $n = $length;
+    while ($n > 0) {
+        $bytes = chr($n & 0xff) . $bytes;
+        $n >>= 8;
+    }
+    return chr(0x80 | strlen($bytes)) . $bytes;
+}
+
+function asn1_read_length(string $data, int &$pos): ?int {
+    if ($pos >= strlen($data)) return null;
+    $len = ord($data[$pos++]);
+    if ($len & 0x80) {
+        $nb = $len & 0x7f;
+        if ($nb === 0 || $nb > 4 || ($pos + $nb) > strlen($data)) return null;
+        $len = 0;
+        for ($i = 0; $i < $nb; $i++) {
+            $len = ($len << 8) | ord($data[$pos++]);
+        }
+    }
+    return $len;
+}
+
+function asn1_octet_string(string $bytes): string {
+    return "\x04" . asn1_length(strlen($bytes)) . $bytes;
+}
+
+function asn1_bit_string(string $bytes): string {
+    $payload = "\x00" . $bytes;
+    return "\x03" . asn1_length(strlen($payload)) . $payload;
+}
+
+function asn1_sequence(string $content): string {
+    return "\x30" . asn1_length(strlen($content)) . $content;
+}
+
+/** Build SEC1 ECPrivateKey DER (optionally with public point for OpenSSL 3). */
+function build_ec_private_key_der(string $private_raw, string $public_raw = ''): string {
+    $oid = hex2bin('06082a8648ce3d030107'); // ecPublicKey + prime256v1
+
+    $body  = "\x02\x01\x01"; // version = 1
+    $body .= asn1_octet_string($private_raw);
+    $body .= "\xa0" . asn1_length(strlen($oid)) . $oid;
+
+    if ($public_raw !== '' && strlen($public_raw) === 65 && $public_raw[0] === "\x04") {
+        $pub = asn1_bit_string($public_raw);
+        $body .= "\xa1" . asn1_length(strlen($pub)) . $pub;
+    }
+
+    return asn1_sequence($body);
+}
+
+function vapid_private_to_pem(string $private_b64, string $public_b64 = ''): string {
+    $raw = b64url_decode($private_b64);
+    if (strlen($raw) !== 32) return '';
+
+    $public_raw = '';
+    if ($public_b64 !== '' && vapid_public_key_valid($public_b64)) {
+        $public_raw = b64url_decode($public_b64);
+    }
+
+    $der = build_ec_private_key_der($raw, $public_raw);
+    return "-----BEGIN EC PRIVATE KEY-----\n"
+         . chunk_split(base64_encode($der), 64, "\n")
+         . "-----END EC PRIVATE KEY-----\n";
+}
+
+/** PKCS#8 wrapper — some OpenSSL builds prefer this over SEC1. */
+function vapid_private_to_pkcs8_pem(string $private_b64, string $public_b64 = ''): string {
+    $raw = b64url_decode($private_b64);
+    if (strlen($raw) !== 32) return '';
+
+    $public_raw = '';
+    if ($public_b64 !== '' && vapid_public_key_valid($public_b64)) {
+        $public_raw = b64url_decode($public_b64);
+    }
+
+    $ec_private = build_ec_private_key_der($raw, $public_raw);
+    $algo_id    = hex2bin('301306072a8648ce3d020106082a8648ce3d030107');
+    $body       = "\x02\x01\x00" . $algo_id . asn1_octet_string($ec_private);
+    $der        = asn1_sequence($body);
+
+    return "-----BEGIN PRIVATE KEY-----\n"
+         . chunk_split(base64_encode($der), 64, "\n")
+         . "-----END PRIVATE KEY-----\n";
+}
+
+function vapid_load_private_key(string $private_b64, string $public_b64 = '') {
+    foreach ([
+        vapid_private_to_pem($private_b64, $public_b64),
+        vapid_private_to_pkcs8_pem($private_b64, $public_b64),
+        vapid_private_to_pem($private_b64),
+        vapid_private_to_pkcs8_pem($private_b64),
+    ] as $pem) {
+        if (!$pem) continue;
+        $key = openssl_pkey_get_private($pem);
+        if ($key) return $key;
+    }
+    return false;
+}
+
+function create_vapid_jwt(string $audience, string $subject, string $private_b64, string $public_b64 = ''): string {
+    $header  = b64url_encode(json_encode(['typ' => 'JWT', 'alg' => 'ES256']));
+    $payload = b64url_encode(json_encode([
+        'aud' => $audience,
+        'exp' => time() + 43200,
+        'sub' => $subject,
+    ]));
+
+    $key = vapid_load_private_key($private_b64, $public_b64);
+    if (!$key) return '';
+
+    $data = "$header.$payload";
+    $der_sig = '';
+    if (!openssl_sign($data, $der_sig, $key, OPENSSL_ALGO_SHA256)) {
+        return '';
+    }
+
+    $sig = der_to_raw_ecdsa($der_sig);
+    if (!$sig) return '';
+
+    return "$data." . b64url_encode($sig);
+}
+
+function der_to_raw_ecdsa(string $der): ?string {
+    $pos = 0;
+    if (($der[$pos] ?? '') !== "\x30") return null;
+    $pos++;
+    if (asn1_read_length($der, $pos) === null) return null;
+
+    if (($der[$pos] ?? '') !== "\x02") return null;
+    $pos++;
+    $r_len = asn1_read_length($der, $pos);
+    if ($r_len === null || ($pos + $r_len) > strlen($der)) return null;
+    $r = substr($der, $pos, $r_len);
+    $pos += $r_len;
+
+    if (($der[$pos] ?? '') !== "\x02") return null;
+    $pos++;
+    $s_len = asn1_read_length($der, $pos);
+    if ($s_len === null || ($pos + $s_len) > strlen($der)) return null;
+    $s = substr($der, $pos, $s_len);
+
+    $r = ltrim($r, "\x00");
+    $s = ltrim($s, "\x00");
+    if (strlen($r) > 32 || strlen($s) > 32) return null;
+
+    return str_pad($r, 32, "\x00", STR_PAD_LEFT) . str_pad($s, 32, "\x00", STR_PAD_LEFT);
+}
+
+/** Admin/diagnostic: verify env keys can produce a VAPID JWT. */
+function vapid_signing_self_test(array $keys): array {
+    $jwt = create_vapid_jwt('https://fcm.googleapis.com', $keys['subject'], $keys['private'], $keys['public']);
+    return [
+        'can_sign'       => $jwt !== '',
+        'pair_valid'     => vapid_keys_are_pair($keys['public'], $keys['private']),
+        'using_defaults' => $keys['using_defaults'] ?? false,
+        'public_len'     => strlen(b64url_decode($keys['public'])),
+        'private_len'    => strlen(b64url_decode($keys['private'])),
+    ];
+}
+
+function vapid_public_from_private(string $private_b64, string $public_b64 = ''): string {
+    $key = vapid_load_private_key($private_b64, $public_b64);
     if (!$key) return '';
     $details = openssl_pkey_get_details($key);
     if (!isset($details['ec']['x'], $details['ec']['y'])) return '';
@@ -166,61 +332,6 @@ function push_send_error_hint(int $code, string $body = ''): string {
     return $snippet
         ? "Push service rejected the message (HTTP $code): $snippet"
         : "Push service rejected the message (HTTP $code).";
-}
-
-function vapid_private_to_pem(string $private_b64): string {
-    $raw = b64url_decode($private_b64);
-    if (strlen($raw) !== 32) return '';
-
-    $oid  = hex2bin('06082a8648ce3d030107');
-    $pk   = "\x04" . str_repeat("\x00", 32) . "\xa1" . chr(4) . chr(34) . "\x04" . chr(32) . $raw;
-    $seq  = "\x30" . chr(strlen($oid) + strlen($pk) + 2) . $oid . $pk;
-    $der  = "\x30" . chr(strlen($seq) + 2) . "\x02\x01\x00" . $seq;
-
-    return "-----BEGIN EC PRIVATE KEY-----\n"
-         . chunk_split(base64_encode($der), 64, "\n")
-         . "-----END EC PRIVATE KEY-----\n";
-}
-
-function create_vapid_jwt(string $audience, string $subject, string $private_b64): string {
-    $header  = b64url_encode(json_encode(['typ' => 'JWT', 'alg' => 'ES256']));
-    $payload = b64url_encode(json_encode([
-        'aud' => $audience,
-        'exp' => time() + 43200,
-        'sub' => $subject,
-    ]));
-
-    $pem = vapid_private_to_pem($private_b64);
-    $key = $pem ? openssl_pkey_get_private($pem) : false;
-    if (!$key) return '';
-
-    $data = "$header.$payload";
-    openssl_sign($data, $der_sig, $key, OPENSSL_ALGO_SHA256);
-
-    // Convert DER signature to raw R||S (64 bytes)
-    $sig = der_to_raw_ecdsa($der_sig);
-    if (!$sig) return '';
-
-    return "$data." . b64url_encode($sig);
-}
-
-function der_to_raw_ecdsa(string $der): ?string {
-    $pos = 0;
-    if (ord($der[$pos++]) !== 0x30) return null;
-    $len = ord($der[$pos++]);
-    if ($len & 0x80) { $nb = $len & 0x7f; $len = 0; for ($i = 0; $i < $nb; $i++) $len = ($len << 8) | ord($der[$pos++]); }
-
-    if (ord($der[$pos++]) !== 0x02) return null;
-    $r_len = ord($der[$pos++]);
-    $r = substr($der, $pos, $r_len); $pos += $r_len;
-
-    if (ord($der[$pos++]) !== 0x02) return null;
-    $s_len = ord($der[$pos++]);
-    $s = substr($der, $pos, $s_len);
-
-    $r = ltrim($r, "\x00");
-    $s = ltrim($s, "\x00");
-    return str_pad($r, 32, "\x00", STR_PAD_LEFT) . str_pad($s, 32, "\x00", STR_PAD_LEFT);
 }
 
 function hkdf(string $ikm, int $length, string $info = '', string $salt = ''): string {
@@ -288,9 +399,18 @@ function send_web_push(array $subscription, array $payload_data, array $vapid): 
     $parsed   = parse_url($endpoint);
     $audience = ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? '');
 
-    $jwt = create_vapid_jwt($audience, $vapid['subject'], $vapid['private']);
+    $jwt = create_vapid_jwt($audience, $vapid['subject'], $vapid['private'], $vapid['public']);
     if (!$jwt) {
-        return ['ok' => false, 'http_code' => 0, 'hint' => 'Could not sign VAPID token. Check VAPID_PRIVATE_KEY on Render.'];
+        $test = vapid_signing_self_test($vapid);
+        $hint = 'Could not sign VAPID token on server.';
+        if (!$test['pair_valid']) {
+            $hint = 'VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY do not match. Generate a new pair in Admin → Push → Generate VAPID Keys and paste BOTH values into Render (no quotes, no labels).';
+        } elseif ($test['using_defaults']) {
+            $hint = 'Render env keys were invalid — server fell back to defaults. Set valid matching VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY, redeploy, then re-enable push on the phone.';
+        } else {
+            $hint = 'OpenSSL could not sign with VAPID_PRIVATE_KEY. Regenerate keys in Admin, update Render, redeploy.';
+        }
+        return ['ok' => false, 'http_code' => 0, 'hint' => $hint];
     }
 
     $payload_json = json_encode($payload_data);

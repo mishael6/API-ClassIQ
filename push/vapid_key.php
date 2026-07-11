@@ -6,12 +6,14 @@ require_once __DIR__ . '/helpers.php';
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') json_error('Method not allowed', 405);
 
 $keys = get_vapid_keys();
+$test = vapid_signing_self_test($keys);
 
 if (!vapid_public_key_valid($keys['public'])) {
-    json_error('Invalid VAPID public key on server. Regenerate keys in Admin → Send SMS → Generate VAPID Keys.', 500);
+    json_error('Invalid VAPID public key on server. Regenerate keys in Admin → Push Notifications → Generate VAPID Keys.', 500);
 }
 
 json_ok([
     'publicKey'      => $keys['public'],
     'usingDefaults'  => $keys['using_defaults'] ?? false,
+    'canSign'        => $test['can_sign'],
 ]);
