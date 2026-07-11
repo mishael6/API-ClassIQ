@@ -37,6 +37,7 @@ function ensure_push_tables(mysqli $conn): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
     ensure_column($conn, 'push_log', 'message_type', "message_type VARCHAR(20) NULL DEFAULT 'manual'");
+    ensure_column($conn, 'push_subscriptions', 'vapid_public', 'vapid_public VARCHAR(128) NULL DEFAULT NULL');
 }
 
 function b64url_encode(string $data): string {
@@ -319,6 +320,11 @@ function get_vapid_keys(): array {
 }
 
 function push_send_error_hint(int $code, string $body = ''): string {
+    $json   = json_decode($body, true);
+    $reason = is_array($json) ? ($json['reason'] ?? '') : '';
+    if ($reason === 'VapidPkHashMismatch' || stripos($body, 'VapidPkHashMismatch') !== false) {
+        return 'This device subscribed with different VAPID keys. On the phone: Settings → Push OFF → Push ON → Allow. Do this after your Render keys are final and deployed.';
+    }
     if ($code === 401) {
         return 'VAPID keys do not match this device. In Render, set BOTH VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY from Admin → Generate VAPID Keys (paste values only), redeploy, then have the student disable and re-enable push in Settings.';
     }
@@ -332,6 +338,14 @@ function push_send_error_hint(int $code, string $body = ''): string {
     return $snippet
         ? "Push service rejected the message (HTTP $code): $snippet"
         : "Push service rejected the message (HTTP $code).";
+}
+
+function push_response_key_mismatch(string $body): bool {
+    $json = json_decode($body, true);
+    if (is_array($json) && ($json['reason'] ?? '') === 'VapidPkHashMismatch') {
+        return true;
+    }
+    return stripos($body, 'VapidPkHashMismatch') !== false;
 }
 
 function hkdf(string $ikm, int $length, string $info = '', string $salt = ''): string {
@@ -448,15 +462,18 @@ function send_web_push(array $subscription, array $payload_data, array $vapid): 
         ? "Network error: $curl_err"
         : push_send_error_hint($http_code, (string)$response);
 
+    $key_mismatch = push_response_key_mismatch((string)$response);
+
     return [
-        'ok'        => false,
-        'http_code' => $http_code,
-        'hint'      => $hint,
-        'expired'   => in_array($http_code, [404, 410]),
+        'ok'           => false,
+        'http_code'    => $http_code,
+        'hint'         => $hint,
+        'expired'      => in_array($http_code, [404, 410]),
+        'key_mismatch' => $key_mismatch,
     ];
 }
 
-function save_push_subscription(mysqli $conn, int $user_id, string $user_role, array $sub, string $ua = ''): void {
+function save_push_subscription(mysqli $conn, int $user_id, string $user_role, array $sub, string $ua = '', string $vapid_public = ''): void {
     ensure_push_tables($conn);
 
     $endpoint = $sub['endpoint'] ?? '';
@@ -466,14 +483,15 @@ function save_push_subscription(mysqli $conn, int $user_id, string $user_role, a
     if (!$endpoint || !$p256dh || !$auth) json_error('Invalid push subscription.');
 
     $stmt = $conn->prepare("
-        INSERT INTO push_subscriptions (user_id, user_role, endpoint, p256dh, auth, user_agent)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO push_subscriptions (user_id, user_role, endpoint, p256dh, auth, user_agent, vapid_public)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             user_id = VALUES(user_id), user_role = VALUES(user_role),
             p256dh = VALUES(p256dh), auth = VALUES(auth),
-            user_agent = VALUES(user_agent), updated_at = NOW()
+            user_agent = VALUES(user_agent), vapid_public = VALUES(vapid_public),
+            updated_at = NOW()
     ");
-    $stmt->bind_param('isssss', $user_id, $user_role, $endpoint, $p256dh, $auth, $ua);
+    $stmt->bind_param('issssss', $user_id, $user_role, $endpoint, $p256dh, $auth, $ua, $vapid_public);
     $stmt->execute();
 }
 
@@ -527,7 +545,7 @@ function broadcast_push(mysqli $conn, string $title, string $body, ?string $role
             if (!empty($push_result['hint'])) {
                 $errors[] = $push_result['hint'];
             }
-            if (!empty($push_result['expired'])) {
+            if (!empty($push_result['expired']) || !empty($push_result['key_mismatch'])) {
                 $del = $conn->prepare("DELETE FROM push_subscriptions WHERE endpoint = ?");
                 $del->bind_param('s', $row['endpoint']);
                 $del->execute();

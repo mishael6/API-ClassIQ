@@ -42,7 +42,8 @@ if (!$user_id) {
 }
 
 $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500);
-save_push_subscription($conn, $user_id, $user_role, $sub, $ua);
+$vapid = get_vapid_keys();
+save_push_subscription($conn, $user_id, $user_role, $sub, $ua, $vapid['public']);
 
 $count = (int)($conn->query("SELECT COUNT(*) AS c FROM push_subscriptions")->fetch_assoc()['c'] ?? 0);
 
