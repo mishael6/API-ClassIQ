@@ -4,18 +4,14 @@
 define('SMS_BATCH_SIZE', 25);
 define('SMS_BATCH_DELAY_MS', 500);
 
-function normalize_ghana_phone(string $phone): ?string {
-    $phone = preg_replace('/\D/', '', $phone);
-    if (strlen($phone) === 10 && str_starts_with($phone, '0')) {
-        return '+233' . substr($phone, 1);
+/** Add a column only if it does not exist (works on older MySQL/MariaDB). */
+function sms_ensure_column(mysqli $conn, string $table, string $column, string $definition): void {
+    $safe_table = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+    $safe_col   = preg_replace('/[^a-zA-Z0-9_]/', '', $column);
+    $result     = $conn->query("SHOW COLUMNS FROM `{$safe_table}` LIKE '{$safe_col}'");
+    if ($result && $result->num_rows === 0) {
+        $conn->query("ALTER TABLE `{$safe_table}` ADD COLUMN {$definition}");
     }
-    if (strlen($phone) === 9) {
-        return '+233' . $phone;
-    }
-    if (strlen($phone) === 12 && str_starts_with($phone, '233')) {
-        return '+' . $phone;
-    }
-    return null;
 }
 
 function ensure_sms_log_table(mysqli $conn): void {
@@ -29,6 +25,22 @@ function ensure_sms_log_table(mysqli $conn): void {
         batch_number    INT          NULL DEFAULT NULL,
         sent_at         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
     )");
+
+    sms_ensure_column($conn, 'sms_log', 'batch_number', 'batch_number INT NULL DEFAULT NULL');
+}
+
+function normalize_ghana_phone(string $phone): ?string {
+    $phone = preg_replace('/\D/', '', $phone);
+    if (strlen($phone) === 10 && str_starts_with($phone, '0')) {
+        return '+233' . substr($phone, 1);
+    }
+    if (strlen($phone) === 9) {
+        return '+233' . $phone;
+    }
+    if (strlen($phone) === 12 && str_starts_with($phone, '233')) {
+        return '+' . $phone;
+    }
+    return null;
 }
 
 function get_payloqa_config(): array {
