@@ -34,7 +34,7 @@ $stmt = $conn->prepare("
     INSERT INTO qr_sessions (token, lecturer_id, code, lecture_name, week_number, session_id, cohort_id, semester_id, class_name, lat, lng, radius_m, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
 ");
-$stmt->bind_param('siisiiiissddi', $token, $lecturer_id, $code, $topic, $week_number, $session_id, $cohort_id, $semester_id, $class_name, $lat, $lng, $radius_m);
+$stmt->bind_param('siisiiiisddi', $token, $lecturer_id, $code, $topic, $week_number, $session_id, $cohort_id, $semester_id, $class_name, $lat, $lng, $radius_m);
 
 if (!$stmt->execute()) json_error('Failed to create session: ' . $stmt->error);
 
