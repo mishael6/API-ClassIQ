@@ -1,12 +1,14 @@
 <?php
 // api/ai/trivia_generate.php
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../lib/ai_helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error('Method not allowed', 405);
 
 $body       = get_body();
 $student_id = (int)($body['student_id'] ?? 0);
 $courses    = trim($body['courses'] ?? '');
+$prompt_limit = ai_free_prompt_limit($conn);
 
 if (!$student_id) json_error('Student ID required.');
 if (!$courses)    json_error('Courses are required.');
@@ -36,11 +38,8 @@ if (!$has_subscription) {
     $row  = $usage->get_result()->fetch_assoc();
     $used = $row['count'] ?? 0;
 
-    if ($used >= 10) {
-        $reset_time = date('Y-m-d H:i:s', strtotime($row['window_start']) + 7200);
-        $diff       = strtotime($reset_time) - time();
-        $mins       = ceil($diff / 60);
-        json_error("You've used all 10 prompts for this 2-hour window. Resets in {$mins} minute(s). Upgrade Six for unlimited access!", 429);
+    if ($used >= $prompt_limit) {
+        json_error(ai_usage_limit_message($prompt_limit, $row['window_start']), 429);
     }
 }
 

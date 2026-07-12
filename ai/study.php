@@ -1,6 +1,7 @@
 <?php
 // api/ai/study.php
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../lib/ai_helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error('Method not allowed', 405);
 
@@ -10,6 +11,7 @@ $image_b64  = trim($body['image']      ?? '');
 $img_mime   = trim($body['mime']       ?? 'image/jpeg');
 $mode       = trim($body['mode']       ?? 'explain');
 $student_id = (int)($body['student_id'] ?? 0);
+$prompt_limit = ai_free_prompt_limit($conn);
 
 if (!$text && !$image_b64) json_error('No text or image provided.');
 if (!$student_id) json_error('Student ID required.');
@@ -107,11 +109,10 @@ if ($image_b64) {
         $usage->execute();
         $row  = $usage->get_result()->fetch_assoc();
         $used = $row['count'] ?? 0;
-        if ($used >= 10) {
-            $diff = strtotime($row['window_start']) + 7200 - time();
-            json_error('You\'ve used all 10 prompts for this window. Resets in ' . ceil($diff/60) . ' min(s). Upgrade Six!', 429);
+        if ($used >= $prompt_limit) {
+            json_error(ai_usage_limit_message($prompt_limit, $row['window_start']), 429);
         }
-        $remaining = 10 - $used;
+        $remaining = $prompt_limit - $used;
     }
 
     $history     = six_parse_history($body['history'] ?? []);
@@ -163,7 +164,7 @@ if ($image_b64) {
         $u2->bind_param('is', $student_id, $window_start2);
         $u2->execute();
         $row2      = $u2->get_result()->fetch_assoc();
-        $remaining = max(0, 10 - ($row2['count'] ?? 0));
+        $remaining = max(0, $prompt_limit - ($row2['count'] ?? 0));
     }
 
     json_ok(['result' => $result, 'mode' => $mode, 'remaining' => $remaining ?? null, 'subscribed' => $has_subscription]);
@@ -196,11 +197,10 @@ if (!$has_subscription) {
     $usage->execute();
     $row  = $usage->get_result()->fetch_assoc();
     $used = $row['count'] ?? 0;
-    if ($used >= 10) {
-        $diff = strtotime($row['window_start']) + 7200 - time();
-        json_error("You've used all 10 prompts for this 2-hour window. Resets in " . ceil($diff/60) . " minute(s). Upgrade Six for unlimited access!", 429);
+    if ($used >= $prompt_limit) {
+        json_error(ai_usage_limit_message($prompt_limit, $row['window_start']), 429);
     }
-    $remaining = 10 - $used;
+    $remaining = $prompt_limit - $used;
 }
 
 // Build conversation messages
@@ -279,7 +279,7 @@ if (!$has_subscription) {
     $u2->bind_param('is', $student_id, $window_start2);
     $u2->execute();
     $row2     = $u2->get_result()->fetch_assoc();
-    $remaining = max(0, 10 - ($row2['count'] ?? 0));
+    $remaining = max(0, $prompt_limit - ($row2['count'] ?? 0));
 }
 
 json_ok([

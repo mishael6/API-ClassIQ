@@ -1,13 +1,15 @@
 <?php
-// api/admin/ai_settings.php
+// api/ai/ai_settings.php
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../lib/ai_helpers.php';
 
 $user = require_auth($conn);
 if ($user['role'] !== 'admin') json_error('Admin access required.', 403);
 
 // GET — fetch current settings and free grants
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    $price = $conn->query("SELECT setting_value FROM ai_settings WHERE setting_key = 'subscription_price' LIMIT 1")->fetch_assoc();
+    $price = ai_get_setting($conn, 'subscription_price', '30.00');
+    $prompt_limit = ai_free_prompt_limit($conn);
 
     $grants = $conn->query("
         SELECT g.id, g.student_id, s.name, s.index_number, g.granted_at, g.expires_at, g.note
@@ -17,7 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     ")->fetch_all(MYSQLI_ASSOC);
 
     json_ok([
-        'subscription_price' => $price['setting_value'] ?? '30.00',
+        'subscription_price' => $price,
+        'free_prompt_limit'  => $prompt_limit,
         'free_grants'        => $grants,
     ]);
 }
@@ -32,11 +35,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $price = (float)($body['price'] ?? 0);
         if ($price <= 0) json_error('Price must be greater than 0.');
 
-        $stmt = $conn->prepare("INSERT INTO ai_settings (setting_key, setting_value) VALUES ('subscription_price', ?) ON DUPLICATE KEY UPDATE setting_value = ?");
-        $p    = number_format($price, 2, '.', '');
-        $stmt->bind_param('ss', $p, $p);
-        $stmt->execute();
+        $p = number_format($price, 2, '.', '');
+        ai_set_setting($conn, 'subscription_price', $p);
         json_ok(['message' => "Subscription price updated to GH₵{$p}."]);
+    }
+
+    // Update free prompt limit per 2-hour window
+    if ($action === 'update_prompt_limit') {
+        $limit = (int)($body['limit'] ?? 0);
+        if ($limit < 1 || $limit > 999) json_error('Prompt limit must be between 1 and 999.');
+
+        ai_set_setting($conn, 'free_prompt_limit', (string)$limit);
+        json_ok(['message' => "Free prompt limit updated to {$limit} per 2-hour window.", 'free_prompt_limit' => $limit]);
     }
 
     // Grant free unlimited to a student
