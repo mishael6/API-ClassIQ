@@ -18,32 +18,67 @@ if ($text && strlen($text) > 20000) json_error('Text too long. Please use a shor
 $api_key = getenv('GROQ_API_KEY');
 if (!$api_key) json_error('AI service not configured.');
 
-$SIX_SYSTEM = 'You are Six, a warm and upbeat AI study buddy for university students in Ghana. '
-    . 'Keep every reply SHORT, scannable, and encouraging. '
-    . 'FORMAT: use **bold headers** for sections, bullet points (•) for lists, short lines only. '
-    . 'Max ~200 words for explanations; no walls of text. End with one motivating line and an emoji. '
-    . 'Never repeat yourself or add filler.';
+$SIX_SYSTEM_TEACH = 'You are Six, a warm and knowledgeable AI study tutor for university students in Ghana. '
+    . 'Your job is to help students truly understand — explain concepts clearly, step by step, with real examples. '
+    . 'Write like a friendly senior student: encouraging, patient, and easy to follow. '
+    . 'Use **bold** for section titles and key terms, bullet points for lists, and short paragraphs. '
+    . 'Give proper explanations — not one-liners. The student may ask follow-up questions, so teach thoroughly.';
 
-$SIX_RULES = "\n\nFORMAT RULES:\n"
-    . "- Use **Section Title** headers\n"
-    . "- Use • bullet points (max 5 bullets per section)\n"
-    . "- Keep sentences under 20 words\n"
-    . "- No long paragraphs\n"
-    . "- End with a short encouraging tip + emoji\n";
+$SIX_SYSTEM_CHAT = 'You are Six, a warm AI study tutor for university students in Ghana. '
+    . 'You are continuing an ongoing conversation. You remember everything discussed above. '
+    . 'When the student asks a follow-up question, answer it directly — reference what you already explained, '
+    . 'never tell them to paste material again, and never repeat the entire previous answer. '
+    . 'Clarify, elaborate, give examples, or quiz them as requested. '
+    . 'Use **bold** for key terms, bullets when helpful, and speak naturally.';
+
+$SIX_RULES = "\n\nKeep your response well-structured and easy to read.\n";
 
 $mode_prompts = [
-    'explain' => "Explain the material below in simple terms for a Ghanaian university student.\n\nStructure:\n**Key Idea** (1-2 sentences)\n**Breakdown** (3-5 bullet points)\n**Quick Example** (1 relatable example)\n**Remember** (1 tip + emoji)\n{$SIX_RULES}\n\n---\n",
-    'mcq'     => "Create exactly 5 multiple-choice questions from the material below.\n\nStructure:\n**Quick Quiz** 📝\nFor each question use:\n1. [Question]?\n   A) ...  B) ...  C) ...  D) ...\n   ✅ Answer: [letter]\n\nKeep questions short. No extra commentary.\n\n---\n",
-    'flashcard' => "Create exactly 8 flashcards from the material below.\n\nFormat each pair exactly:\nQ: [short question]\nA: [concise answer]\n\nNo extra text before or after.\n\n---\n",
-    'fill'    => "Create exactly 5 fill-in-the-blank questions from the material below.\n\nUse ___ for blanks. Then on a new line write:\n**Answers** ✅\n1. answer\n2. answer\n...\n\n---\n",
+    'explain' => "Teach the following study material to the student. Give a proper explanation they can learn from:\n\n"
+        . "**Overview** — What is this topic about? (2-4 clear sentences)\n"
+        . "**Core Concepts** — Explain each important idea in plain language (use bullet points)\n"
+        . "**Worked Example** — Walk through one concrete example step by step\n"
+        . "**Why It Matters** — How this connects to their course or real life\n"
+        . "**Quick Check** — 2 short questions they can ask you if still confused\n"
+        . "{$SIX_RULES}\n---\n",
+    'mcq'     => "Create 5 multiple-choice questions from the material below to test understanding.\n\n"
+        . "**Practice Quiz** 📝\n"
+        . "For each question:\n1. [Clear question]?\n   A) ...  B) ...  C) ...  D) ...\n   ✅ Answer: [letter] — [one-line explanation why]\n\n"
+        . "Make questions meaningful, not trivial.\n---\n",
+    'flashcard' => "Create 8 flashcards from the material below for revision.\n\n"
+        . "Format each pair exactly:\nQ: [clear question]\nA: [complete but concise answer]\n\n---\n",
+    'fill'    => "Create 5 fill-in-the-blank questions from the material below.\n\n"
+        . "Use ___ for each blank. After all questions write:\n**Answers** ✅\n1. answer\n...\n\n---\n",
 ];
 
 $img_mode_prompts = [
-    'explain'   => 'Read this image, extract the key content, then explain it simply. Use **Key Idea**, **Breakdown** (bullets), **Quick Example**, **Remember** (tip + emoji). Keep it brief.',
-    'mcq'       => 'Read this image and create 5 short MCQs. Format: numbered questions, A-D options, ✅ Answer per question.',
+    'explain'   => 'Read this image and teach the content properly. Use **Overview**, **Core Concepts** (bullets), **Worked Example**, and **Why It Matters**. Explain clearly so the student learns.',
+    'mcq'       => 'Read this image and create 5 MCQs with A-D options. Add ✅ Answer and a brief why for each.',
     'flashcard' => 'Read this image and create 8 flashcards. Format: Q: ... A: ... only.',
     'fill'      => 'Read this image and create 5 fill-in-the-blank questions with ___ blanks, then **Answers** ✅ section.',
 ];
+
+function six_parse_history(array $raw): array {
+    $out = [];
+    foreach (array_slice($raw, -12) as $m) {
+        if (!is_array($m)) continue;
+        $role = (($m['role'] ?? '') === 'assistant') ? 'assistant' : 'user';
+        $content = trim((string)($m['content'] ?? ''));
+        if ($content === '') continue;
+        $out[] = ['role' => $role, 'content' => mb_substr($content, 0, 4000)];
+    }
+    return $out;
+}
+
+function six_mode_hint(string $mode): string {
+    $hints = [
+        'explain'   => 'Focus on clear teaching and understanding.',
+        'mcq'       => 'If quizzing, base questions on the conversation so far.',
+        'flashcard' => 'If making flashcards, use content from the conversation.',
+        'fill'      => 'If fill-in-the-blank, use content from the conversation.',
+    ];
+    return $hints[$mode] ?? '';
+}
 
 $now = date('Y-m-d H:i:s');
 
@@ -79,19 +114,27 @@ if ($image_b64) {
         $remaining = 10 - $used;
     }
 
-    $img_prompt = $img_mode_prompts[$mode] ?? $img_mode_prompts['explain'];
+    $history     = six_parse_history($body['history'] ?? []);
+    $img_prompt  = $img_mode_prompts[$mode] ?? $img_mode_prompts['explain'];
+    if ($history) {
+        $ctx = "Conversation so far (use this context):\n";
+        foreach (array_slice($history, -8) as $h) {
+            $ctx .= strtoupper($h['role']) . ': ' . mb_substr($h['content'], 0, 600) . "\n";
+        }
+        $img_prompt = $ctx . "\n" . $img_prompt;
+    }
 
     $payload = json_encode([
         'model'    => 'meta-llama/llama-4-scout-17b-16e-instruct',
         'messages' => [
-            ['role' => 'system', 'content' => $SIX_SYSTEM],
+            ['role' => 'system', 'content' => $SIX_SYSTEM_TEACH],
             ['role' => 'user', 'content' => [
                 ['type' => 'text',      'text'      => $img_prompt],
                 ['type' => 'image_url', 'image_url' => ['url' => "data:{$img_mime};base64,{$image_b64}"]],
             ]],
         ],
-        'max_tokens'  => 1000,
-        'temperature' => 0.6,
+        'max_tokens'  => 1800,
+        'temperature' => 0.7,
     ]);
 
     $ch = curl_init('https://api.groq.com/openai/v1/chat/completions');
@@ -160,18 +203,38 @@ if (!$has_subscription) {
     $remaining = 10 - $used;
 }
 
-// Build prompt
-$prefix = $mode_prompts[$mode] ?? $mode_prompts['explain'];
-$prompt = $prefix . $text;
+// Build conversation messages
+$history = six_parse_history($body['history'] ?? []);
+$has_prior_ai = false;
+foreach ($history as $h) {
+    if ($h['role'] === 'assistant') { $has_prior_ai = true; break; }
+}
+// Follow-up: student already got an explanation and is asking a shorter question
+$is_followup = $has_prior_ai && strlen($text) < 2000;
+
+$messages = [];
+if ($is_followup) {
+    $messages[] = ['role' => 'system', 'content' => $SIX_SYSTEM_CHAT . ' ' . six_mode_hint($mode)];
+    foreach ($history as $h) {
+        $messages[] = $h;
+    }
+    $messages[] = ['role' => 'user', 'content' => $text];
+} else {
+    $prefix = $mode_prompts[$mode] ?? $mode_prompts['explain'];
+    $messages[] = ['role' => 'system', 'content' => $SIX_SYSTEM_TEACH];
+    foreach ($history as $h) {
+        $messages[] = $h;
+    }
+    $messages[] = ['role' => 'user', 'content' => $prefix . $text];
+}
+
+$max_tokens = ($mode === 'explain' || $is_followup) ? 2000 : 1600;
 
 $payload = json_encode([
-    'model'    => 'llama-3.3-70b-versatile',
-    'messages' => [
-        ['role' => 'system', 'content' => $SIX_SYSTEM],
-        ['role' => 'user',   'content' => $prompt],
-    ],
-    'max_tokens'  => 1000,
-    'temperature' => 0.6,
+    'model'       => 'llama-3.3-70b-versatile',
+    'messages'    => $messages,
+    'max_tokens'  => $max_tokens,
+    'temperature' => 0.7,
 ]);
 
 $ch = curl_init('https://api.groq.com/openai/v1/chat/completions');
@@ -182,7 +245,7 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
     'Content-Type: application/json',
     "Authorization: Bearer $api_key",
 ]);
-curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+curl_setopt($ch, CURLOPT_TIMEOUT, 45);
 
 $response  = curl_exec($ch);
 $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
