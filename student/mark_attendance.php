@@ -13,8 +13,9 @@ $lecturer_id  = (int)($body['lecturer_id']  ?? 0);
 $code         = (int)($body['code']          ?? 0);
 $lecture_name = trim($body['lecture_name']   ?? $body['topic'] ?? '');
 $week_number  = (int)($body['week_number']   ?? $body['week'] ?? 0);
-$class_id     = (int)($body['class_id']     ?? 0);
-$class_number = (int)($body['class_number']  ?? $body['class'] ?? 0);
+$session_id   = (int)($body['session_id']   ?? 0);
+$cohort_id    = (int)($body['cohort_id']    ?? $body['class_id'] ?? 0);
+$class_name   = trim($body['class_name']    ?? (is_string($body['class'] ?? null) ? $body['class'] : ''));
 $index_number = strtoupper(trim($body['index_number'] ?? ''));
 $device_id    = trim($body['device_id']      ?? '');
 $student_lat  = isset($body['student_lat']) && $body['student_lat'] !== '' ? (float)$body['student_lat'] : null;
@@ -37,10 +38,10 @@ if (!empty($body['report_issue'])) {
 
 if (!$owner_id || !$code || !$index_number || !$device_id) json_error('Missing required fields.');
 if ($student_lat === null || $student_lng === null) json_error('Location access is required to mark attendance. Please allow GPS and try again.');
-if ($is_lecturer && (!$class_id && (!$week_number || !$lecture_name))) json_error('Invalid lecturer session.');
+if ($is_lecturer && (!$session_id && !$cohort_id && (!$week_number || !$lecture_name))) json_error('Invalid lecturer session.');
 
 if ($is_lecturer) {
-    $sess = $conn->prepare("SELECT id, lat, lng, radius_m, week_number, class_id, class_number, semester_id, lecture_name FROM qr_sessions WHERE lecturer_id = ? AND code = ? AND ended_at IS NULL LIMIT 1");
+    $sess = $conn->prepare("SELECT id, lat, lng, radius_m, week_number, session_id, cohort_id, semester_id, class_name, lecture_name FROM qr_sessions WHERE lecturer_id = ? AND code = ? AND ended_at IS NULL LIMIT 1");
     $sess->bind_param('ii', $lecturer_id, $code);
 } else {
     $sess = $conn->prepare("SELECT id, lat, lng, radius_m FROM qr_sessions WHERE classrep_id = ? AND code = ? AND ended_at IS NULL LIMIT 1");
@@ -51,11 +52,12 @@ $session = $sess->get_result()->fetch_assoc();
 if (!$session) json_error('Attendance session is closed or invalid.');
 
 if ($is_lecturer) {
-    $week_number   = (int)$session['week_number'];
-    $class_id      = (int)($session['class_id'] ?? 0);
-    $class_number  = (int)($session['class_number'] ?? 0);
-    $semester_id   = (int)($session['semester_id'] ?? 0);
-    $lecture_name  = $session['lecture_name'];
+    $week_number  = (int)$session['week_number'];
+    $session_id   = (int)($session['session_id'] ?? 0);
+    $cohort_id    = (int)($session['cohort_id'] ?? 0);
+    $semester_id  = (int)($session['semester_id'] ?? 0);
+    $class_name   = $session['class_name'] ?? '';
+    $lecture_name = $session['lecture_name'];
 }
 
 $classroom_lat  = $session['lat'];
@@ -75,24 +77,36 @@ $s->execute();
 $student = $s->get_result()->fetch_assoc();
 if (!$student) json_error('Student not found. Register under this ' . ($is_lecturer ? 'lecturer' : 'class rep') . ' first.');
 
+if ($is_lecturer && $cohort_id && (int)($student['lecturer_cohort_id'] ?? 0) !== $cohort_id) {
+    json_error('You are not registered in class ' . ($class_name ?: '') . '. Use your class registration link.');
+}
+
 $location_status = 'Present';
 $today           = date('Y-m-d');
 $time_marked     = date('Y-m-d H:i:s');
 
 if ($is_lecturer) {
-    if ($class_id) {
-        $dup = $conn->prepare("SELECT 1 FROM attendance WHERE index_number = ? AND attendance_date = CURDATE() AND lecturer_id = ? AND class_id = ? LIMIT 1");
-        $dup->bind_param('sii', $index_number, $lecturer_id, $class_id);
+    $dup_key = $session_id ?: $cohort_id;
+    if ($dup_key) {
+        $dup = $conn->prepare("SELECT 1 FROM attendance WHERE index_number = ? AND attendance_date = CURDATE() AND lecturer_id = ? AND session_id = ? LIMIT 1");
+        $dup->bind_param('sii', $index_number, $lecturer_id, $session_id);
+        if (!$session_id) {
+            $dup = $conn->prepare("SELECT 1 FROM attendance WHERE index_number = ? AND attendance_date = CURDATE() AND lecturer_id = ? AND cohort_id = ? LIMIT 1");
+            $dup->bind_param('sii', $index_number, $lecturer_id, $cohort_id);
+        }
     } else {
         $dup = $conn->prepare("SELECT 1 FROM attendance WHERE index_number = ? AND attendance_date = CURDATE() AND lecturer_id = ? AND week_number = ? LIMIT 1");
         $dup->bind_param('sii', $index_number, $lecturer_id, $week_number);
     }
     $dup->execute();
-    if ($dup->get_result()->num_rows > 0) json_error('You have already marked attendance for this class.');
+    if ($dup->get_result()->num_rows > 0) json_error('You have already marked attendance for this session.');
 
-    if ($class_id) {
-        $dev = $conn->prepare("SELECT 1 FROM attendance WHERE device_id = ? AND lecturer_id = ? AND class_id = ? AND attendance_date = CURDATE() AND index_number != ? LIMIT 1");
-        $dev->bind_param('siis', $device_id, $lecturer_id, $class_id, $index_number);
+    if ($session_id) {
+        $dev = $conn->prepare("SELECT 1 FROM attendance WHERE device_id = ? AND lecturer_id = ? AND session_id = ? AND attendance_date = CURDATE() AND index_number != ? LIMIT 1");
+        $dev->bind_param('siis', $device_id, $lecturer_id, $session_id, $index_number);
+    } elseif ($cohort_id) {
+        $dev = $conn->prepare("SELECT 1 FROM attendance WHERE device_id = ? AND lecturer_id = ? AND cohort_id = ? AND attendance_date = CURDATE() AND index_number != ? LIMIT 1");
+        $dev->bind_param('siis', $device_id, $lecturer_id, $cohort_id, $index_number);
     } else {
         $dev = $conn->prepare("SELECT 1 FROM attendance WHERE device_id = ? AND lecturer_id = ? AND week_number = ? AND attendance_date = CURDATE() AND index_number != ? LIMIT 1");
         $dev->bind_param('siis', $device_id, $lecturer_id, $week_number, $index_number);
@@ -100,9 +114,12 @@ if ($is_lecturer) {
     $dev->execute();
     if ($dev->get_result()->num_rows > 0) {
         $location_status = 'Flagged';
-        if ($class_id) {
-            $upd = $conn->prepare("UPDATE attendance SET status = 'Flagged' WHERE device_id = ? AND lecturer_id = ? AND class_id = ? AND attendance_date = CURDATE() AND index_number != ? AND status = 'Present' AND deleted_at IS NULL");
-            $upd->bind_param('siis', $device_id, $lecturer_id, $class_id, $index_number);
+        if ($session_id) {
+            $upd = $conn->prepare("UPDATE attendance SET status = 'Flagged' WHERE device_id = ? AND lecturer_id = ? AND session_id = ? AND attendance_date = CURDATE() AND index_number != ? AND status = 'Present' AND deleted_at IS NULL");
+            $upd->bind_param('siis', $device_id, $lecturer_id, $session_id, $index_number);
+        } elseif ($cohort_id) {
+            $upd = $conn->prepare("UPDATE attendance SET status = 'Flagged' WHERE device_id = ? AND lecturer_id = ? AND cohort_id = ? AND attendance_date = CURDATE() AND index_number != ? AND status = 'Present' AND deleted_at IS NULL");
+            $upd->bind_param('siis', $device_id, $lecturer_id, $cohort_id, $index_number);
         } else {
             $upd = $conn->prepare("UPDATE attendance SET status = 'Flagged' WHERE device_id = ? AND lecturer_id = ? AND week_number = ? AND attendance_date = CURDATE() AND index_number != ? AND status = 'Present' AND deleted_at IS NULL");
             $upd->bind_param('siis', $device_id, $lecturer_id, $week_number, $index_number);
@@ -111,8 +128,8 @@ if ($is_lecturer) {
     }
 
     $null_cr = null;
-    $ins = $conn->prepare("INSERT INTO attendance (student_id, classrep_id, lecturer_id, student_name, index_number, attendance_date, time_marked, lecture_name, week_number, class_id, semester_id, class_number, device_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $ins->bind_param('iiisssssiiiiss', $student['id'], $null_cr, $lecturer_id, $student['name'], $index_number, $today, $time_marked, $lecture_name, $week_number, $class_id, $semester_id, $class_number, $device_id, $location_status);
+    $ins = $conn->prepare("INSERT INTO attendance (student_id, classrep_id, lecturer_id, student_name, index_number, attendance_date, time_marked, lecture_name, week_number, session_id, cohort_id, semester_id, class_name, device_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $ins->bind_param('iiisssssiiiisss', $student['id'], $null_cr, $lecturer_id, $student['name'], $index_number, $today, $time_marked, $lecture_name, $week_number, $session_id, $cohort_id, $semester_id, $class_name, $device_id, $location_status);
 } else {
     $dup = $conn->prepare("SELECT 1 FROM attendance WHERE index_number = ? AND attendance_date = CURDATE() AND classrep_id = ? AND lecture_name = ? LIMIT 1");
     $dup->bind_param('sis', $index_number, $classrep_id, $lecture_name);
@@ -141,7 +158,7 @@ if ($location_status === 'Flagged') $message .= ' (flagged for review)';
 try {
     require_once __DIR__ . '/../push/automated.php';
     $label = $is_lecturer
-        ? ($class_number ? "Week $week_number · Class $class_number: $lecture_name" : "Week $week_number: $lecture_name")
+        ? ($class_name ? "{$class_name} · Week $week_number: $lecture_name" : "Week $week_number: $lecture_name")
         : $lecture_name;
     send_attendance_push($conn, $student, $label, $location_status);
 } catch (Throwable $e) { /* optional */ }

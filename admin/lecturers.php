@@ -105,13 +105,14 @@ if ($method === 'DELETE') {
             $weeks = $conn->query("SELECT id FROM lecturer_weeks WHERE semester_id = $sid");
             if ($weeks) {
                 while ($wk = $weeks->fetch_assoc()) {
-                    $conn->query("DELETE FROM lecturer_classes WHERE week_id = " . (int)$wk['id']);
+                    $conn->query("DELETE FROM lecturer_sessions WHERE week_id = " . (int)$wk['id']);
                 }
             }
             $conn->query("DELETE FROM lecturer_weeks WHERE semester_id = $sid");
         }
     }
     $conn->query("DELETE FROM lecturer_semesters WHERE lecturer_id = $id");
+    $conn->query("DELETE FROM lecturer_cohorts WHERE lecturer_id = $id");
     $conn->query("DELETE FROM students WHERE user_id = $id");
     $conn->query("DELETE FROM troubleshooting_logs WHERE user_id = $id");
     $conn->query("DELETE FROM users WHERE id = $id AND role = 'lecturer'");

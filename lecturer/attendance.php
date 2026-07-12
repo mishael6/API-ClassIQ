@@ -8,10 +8,10 @@ ensure_lecturer_schema($conn);
 
 $stmt = $conn->prepare("
     SELECT student_id, student_name, index_number, attendance_date,
-           time_marked, lecture_name, week_number, class_number, class_id, semester_id, device_id, status
+           time_marked, lecture_name, week_number, class_name, session_id, cohort_id, semester_id, device_id, status
     FROM attendance
     WHERE lecturer_id = ? AND deleted_at IS NULL
-    ORDER BY attendance_date DESC, week_number ASC, class_number ASC, time_marked ASC
+    ORDER BY attendance_date DESC, week_number ASC, class_name ASC, time_marked ASC
     LIMIT 500
 ");
 $stmt->bind_param('i', $lecturer_id);
@@ -29,7 +29,8 @@ foreach ($sn->get_result()->fetch_all(MYSQLI_ASSOC) as $s) {
 $records = [];
 foreach ($rows as $row) {
     $sem_label = isset($semester_names[(int)($row['semester_id'] ?? 0)]) ? $semester_names[$row['semester_id']] : 'Semester';
-    $week_key  = "{$sem_label} · Week " . ($row['week_number'] ?? 0) . " · Class " . ($row['class_number'] ?? 1) . ": " . ($row['lecture_name'] ?? '');
+    $cname     = $row['class_name'] ?: 'Class';
+    $week_key  = "{$sem_label} · Week " . ($row['week_number'] ?? 0) . " · {$cname}: " . ($row['lecture_name'] ?? '');
     $records[$week_key][$row['attendance_date']][] = $row;
 }
 

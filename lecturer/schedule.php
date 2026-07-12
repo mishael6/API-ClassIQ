@@ -1,5 +1,4 @@
 <?php
-// api/lecturer/schedule.php — Semester → Week → Class hierarchy
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../lib/lecturer_helpers.php';
 
@@ -29,7 +28,8 @@ function verify_week_owner(mysqli $conn, int $week_id, int $lecturer_id): ?array
 }
 
 if ($method === 'GET') {
-    json_ok(['semesters' => lecturer_schedule_tree($conn, $lecturer_id)]);
+    $tree = lecturer_schedule_tree($conn, $lecturer_id);
+    json_ok($tree);
 }
 
 if ($method === 'POST') {
@@ -59,23 +59,23 @@ if ($method === 'POST') {
         json_ok(['message' => 'Week added.', 'id' => $conn->insert_id]);
     }
 
-    if ($type === 'class') {
-        $week_id       = (int)($body['week_id'] ?? 0);
-        $class_number  = (int)($body['class_number'] ?? 0);
-        $topic         = trim($body['topic'] ?? '');
+    if ($type === 'session' || $type === 'class') {
+        $week_id   = (int)($body['week_id'] ?? 0);
+        $cohort_id = (int)($body['cohort_id'] ?? $body['class_id'] ?? 0);
+        $topic     = trim($body['topic'] ?? '');
         if (!$week_id || !verify_week_owner($conn, $week_id, $lecturer_id)) json_error('Invalid week.');
-        if ($class_number < 1) json_error('Class number must be at least 1.');
+        if (!$cohort_id || !lecturer_cohort_context($conn, $cohort_id, $lecturer_id)) json_error('Invalid class. Add the class under My Classes first.');
         if (!$topic) json_error('Topic is required.');
-        $stmt = $conn->prepare("INSERT INTO lecturer_classes (week_id, class_number, topic) VALUES (?, ?, ?)");
-        $stmt->bind_param('iis', $week_id, $class_number, $topic);
+        $stmt = $conn->prepare("INSERT INTO lecturer_sessions (week_id, cohort_id, topic) VALUES (?, ?, ?)");
+        $stmt->bind_param('iis', $week_id, $cohort_id, $topic);
         if (!$stmt->execute()) {
-            if ($conn->errno === 1062) json_error("Class $class_number already exists in this week.");
-            json_error('Failed to add class: ' . $stmt->error);
+            if ($conn->errno === 1062) json_error('This class already has a session in this week.');
+            json_error('Failed to add session: ' . $stmt->error);
         }
-        json_ok(['message' => 'Class added.', 'id' => $conn->insert_id]);
+        json_ok(['message' => 'Session added.', 'id' => $conn->insert_id]);
     }
 
-    json_error('Invalid type. Use semester, week, or class.');
+    json_error('Invalid type. Use semester, week, or session.');
 }
 
 if ($method === 'PUT') {
@@ -97,24 +97,28 @@ if ($method === 'PUT') {
     if ($type === 'week') {
         $week_number = (int)($body['week_number'] ?? 0);
         if ($week_number < 1) json_error('Week number is required.');
-        $week = verify_week_owner($conn, $id, $lecturer_id);
-        if (!$week) json_error('Week not found.');
+        if (!verify_week_owner($conn, $id, $lecturer_id)) json_error('Week not found.');
         $stmt = $conn->prepare("UPDATE lecturer_weeks SET week_number = ? WHERE id = ?");
         $stmt->bind_param('ii', $week_number, $id);
         if (!$stmt->execute()) json_error('Update failed.');
         json_ok(['message' => 'Week updated.']);
     }
 
-    if ($type === 'class') {
-        $class_number = (int)($body['class_number'] ?? 0);
-        $topic        = trim($body['topic'] ?? '');
-        if ($class_number < 1 || !$topic) json_error('Class number and topic are required.');
-        $ctx = lecturer_class_context($conn, $id, $lecturer_id);
-        if (!$ctx) json_error('Class not found.');
-        $stmt = $conn->prepare("UPDATE lecturer_classes SET class_number = ?, topic = ? WHERE id = ?");
-        $stmt->bind_param('isi', $class_number, $topic, $id);
+    if ($type === 'session' || $type === 'class') {
+        $cohort_id = (int)($body['cohort_id'] ?? $body['class_id'] ?? 0);
+        $topic     = trim($body['topic'] ?? '');
+        if (!$topic) json_error('Topic is required.');
+        if (!lecturer_session_context($conn, $id, $lecturer_id)) json_error('Session not found.');
+        if ($cohort_id && !lecturer_cohort_context($conn, $cohort_id, $lecturer_id)) json_error('Invalid class.');
+        if ($cohort_id) {
+            $stmt = $conn->prepare("UPDATE lecturer_sessions SET cohort_id = ?, topic = ? WHERE id = ?");
+            $stmt->bind_param('isi', $cohort_id, $topic, $id);
+        } else {
+            $stmt = $conn->prepare("UPDATE lecturer_sessions SET topic = ? WHERE id = ?");
+            $stmt->bind_param('si', $topic, $id);
+        }
         if (!$stmt->execute()) json_error('Update failed.');
-        json_ok(['message' => 'Class updated.']);
+        json_ok(['message' => 'Session updated.']);
     }
 
     json_error('Invalid type.');
@@ -133,7 +137,7 @@ if ($method === 'DELETE') {
         $weeks->execute();
         foreach ($weeks->get_result()->fetch_all(MYSQLI_ASSOC) as $w) {
             $wid = (int)$w['id'];
-            $conn->query("DELETE FROM lecturer_classes WHERE week_id = $wid");
+            $conn->query("DELETE FROM lecturer_sessions WHERE week_id = $wid");
         }
         $conn->query("DELETE FROM lecturer_weeks WHERE semester_id = $id");
         $stmt = $conn->prepare("DELETE FROM lecturer_semesters WHERE id = ? AND lecturer_id = ?");
@@ -144,19 +148,19 @@ if ($method === 'DELETE') {
 
     if ($type === 'week') {
         if (!verify_week_owner($conn, $id, $lecturer_id)) json_error('Week not found.');
-        $conn->query("DELETE FROM lecturer_classes WHERE week_id = $id");
+        $conn->query("DELETE FROM lecturer_sessions WHERE week_id = $id");
         $stmt = $conn->prepare("DELETE FROM lecturer_weeks WHERE id = ?");
         $stmt->bind_param('i', $id);
         $stmt->execute();
         json_ok(['message' => 'Week removed.']);
     }
 
-    if ($type === 'class') {
-        if (!lecturer_class_context($conn, $id, $lecturer_id)) json_error('Class not found.');
-        $stmt = $conn->prepare("DELETE FROM lecturer_classes WHERE id = ?");
+    if ($type === 'session' || $type === 'class') {
+        if (!lecturer_session_context($conn, $id, $lecturer_id)) json_error('Session not found.');
+        $stmt = $conn->prepare("DELETE FROM lecturer_sessions WHERE id = ?");
         $stmt->bind_param('i', $id);
         $stmt->execute();
-        json_ok(['message' => 'Class removed.']);
+        json_ok(['message' => 'Session removed.']);
     }
 
     json_error('Invalid type.');

@@ -1,5 +1,4 @@
 <?php
-// Backward-compatible alias — returns flat class list for legacy clients
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../lib/lecturer_helpers.php';
 
@@ -11,22 +10,25 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     json_error('Use /lecturer/schedule.php for create, update and delete.', 400);
 }
 
-$classes = [];
-foreach (lecturer_schedule_tree($conn, $lecturer_id) as $sem) {
+$tree = lecturer_schedule_tree($conn, $lecturer_id);
+$flat = [];
+foreach ($tree['semesters'] as $sem) {
     foreach ($sem['weeks'] as $week) {
-        foreach ($week['classes'] as $cls) {
-            $classes[] = [
-                'id'            => $cls['id'],
+        foreach ($week['sessions'] as $sess) {
+            $flat[] = [
+                'id'            => $sess['id'],
+                'session_id'    => $sess['id'],
                 'semester_id'   => $sem['id'],
                 'semester_name' => $sem['name'],
                 'week_id'       => $week['id'],
                 'week_number'   => $week['week_number'],
-                'class_number'  => $cls['class_number'],
-                'topic'         => $cls['topic'],
-                'created_at'    => $cls['created_at'],
+                'cohort_id'     => $sess['cohort_id'],
+                'class_name'    => $sess['class_name'],
+                'topic'         => $sess['topic'],
+                'created_at'    => $sess['created_at'],
             ];
         }
     }
 }
 
-json_ok(['classes' => $classes, 'semesters' => lecturer_schedule_tree($conn, $lecturer_id)]);
+json_ok(['sessions' => $flat, 'semesters' => $tree['semesters'], 'cohorts' => $tree['cohorts']]);
