@@ -113,6 +113,7 @@ if ($method === 'DELETE') {
     }
     $conn->query("DELETE FROM lecturer_semesters WHERE lecturer_id = $id");
     $conn->query("DELETE FROM lecturer_cohorts WHERE lecturer_id = $id");
+    $conn->query("DELETE FROM lecturer_saved_locations WHERE lecturer_id = $id");
     $conn->query("DELETE FROM students WHERE user_id = $id");
     $conn->query("DELETE FROM troubleshooting_logs WHERE user_id = $id");
     $conn->query("DELETE FROM users WHERE id = $id AND role = 'lecturer'");
