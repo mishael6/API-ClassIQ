@@ -2,6 +2,7 @@
 // api/messages.php — shared by admin, classrep, and student
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/lib/messages_helpers.php';
+require_once __DIR__ . '/lib/issue_notifications.php';
 
 ensure_messages_table($conn);
 
@@ -122,6 +123,18 @@ if ($method === 'POST') {
     // If issue was resolved, reopen it when classrep/student replies
     if ($sender_role === 'classrep' || $sender_role === 'student') {
         $conn->query("UPDATE troubleshooting_logs SET status = 'pending' WHERE id = $issue_id AND status = 'resolved'");
+
+        // Notify admin of follow-up reply
+        $reporter = get_issue_reporter($conn, $issue_id);
+        $rname    = $reporter['name'] ?? 'User';
+        issue_notify_safe(function () use ($conn, $issue_id, $rname, $sender_role, $message) {
+            notify_admin_issue_reply($conn, $issue_id, $rname, $sender_role, $message);
+        });
+    } elseif ($sender_role === 'admin') {
+        // Notify user via SMS + push
+        issue_notify_safe(function () use ($conn, $issue_id, $message) {
+            notify_user_admin_reply($conn, $issue_id, $message);
+        });
     }
 
     json_ok(['message' => 'Message sent.', 'id' => $new_id]);

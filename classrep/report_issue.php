@@ -18,4 +18,11 @@ $stmt = $conn->prepare("INSERT INTO troubleshooting_logs (user_id, message, stat
 $stmt->bind_param('is', $classrep_id, $full_message);
 
 if (!$stmt->execute()) json_error('Failed to submit report.');
-json_ok(['message' => 'Issue reported successfully.']);
+
+$issue_id = (int)$conn->insert_id;
+require_once __DIR__ . '/../lib/issue_notifications.php';
+issue_notify_safe(function () use ($conn, $issue_id, $user, $subject, $message) {
+    notify_admin_new_issue($conn, $issue_id, $user['name'] ?? 'Class Rep', 'classrep', $subject, $message);
+});
+
+json_ok(['message' => 'Issue reported successfully.', 'issue_id' => $issue_id]);
