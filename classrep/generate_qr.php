@@ -25,9 +25,7 @@ if (!$stmt->execute()) json_error('Failed to create session: ' . $stmt->error);
 
 $session_id = $conn->insert_id;
 
-// Build attendance URL — React frontend route
-$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$frontend_base = getenv('FRONTEND_URL') ?: 'https://class-iq.netlify.app';
+$frontend_base = student_frontend_url();
 $attendance_url = "{$frontend_base}/mark-attendance?classrep_id={$classrep_id}&code={$code}&lecture=" . urlencode($lecture_name);
 
 json_ok([

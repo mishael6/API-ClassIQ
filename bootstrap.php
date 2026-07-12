@@ -127,6 +127,12 @@ function require_admin(mysqli $conn): array {
     return $row;
 }
 
+// ── Student-facing URLs (QR scan, registration links) ─────────
+function student_frontend_url(): string {
+    $url = trim(getenv('FRONTEND_URL') ?: '');
+    return $url !== '' ? rtrim($url, '/') : 'https://class-iq.netlify.app';
+}
+
 // ── Response helpers ──────────────────────────────────────────
 function json_ok(array $data = [], int $code = 200): void {
     http_response_code($code);

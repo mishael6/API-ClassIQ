@@ -35,7 +35,7 @@ $stmt->bind_param('siisiddi', $token, $lecturer_id, $code, $topic, $week_number,
 if (!$stmt->execute()) json_error('Failed to create session: ' . $stmt->error);
 
 $session_id = $conn->insert_id;
-$frontend_base = getenv('FRONTEND_URL') ?: 'https://app-class-iq.netlify.app';
+$frontend_base = student_frontend_url();
 $attendance_url = "{$frontend_base}/mark-attendance?lecturer_id={$lecturer_id}&code={$code}&week={$week_number}&topic=" . urlencode($topic);
 
 json_ok([
