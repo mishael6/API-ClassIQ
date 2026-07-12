@@ -12,7 +12,7 @@ $stmt = $conn->prepare("
     FROM attendance
     WHERE lecturer_id = ? AND deleted_at IS NULL
     ORDER BY attendance_date DESC, week_number ASC, class_name ASC, time_marked ASC
-    LIMIT 500
+    LIMIT 5000
 ");
 $stmt->bind_param('i', $lecturer_id);
 $stmt->execute();
