@@ -18,6 +18,33 @@ if ($text && strlen($text) > 20000) json_error('Text too long. Please use a shor
 $api_key = getenv('GROQ_API_KEY');
 if (!$api_key) json_error('AI service not configured.');
 
+$SIX_SYSTEM = 'You are Six, a warm and upbeat AI study buddy for university students in Ghana. '
+    . 'Keep every reply SHORT, scannable, and encouraging. '
+    . 'FORMAT: use **bold headers** for sections, bullet points (•) for lists, short lines only. '
+    . 'Max ~200 words for explanations; no walls of text. End with one motivating line and an emoji. '
+    . 'Never repeat yourself or add filler.';
+
+$SIX_RULES = "\n\nFORMAT RULES:\n"
+    . "- Use **Section Title** headers\n"
+    . "- Use • bullet points (max 5 bullets per section)\n"
+    . "- Keep sentences under 20 words\n"
+    . "- No long paragraphs\n"
+    . "- End with a short encouraging tip + emoji\n";
+
+$mode_prompts = [
+    'explain' => "Explain the material below in simple terms for a Ghanaian university student.\n\nStructure:\n**Key Idea** (1-2 sentences)\n**Breakdown** (3-5 bullet points)\n**Quick Example** (1 relatable example)\n**Remember** (1 tip + emoji)\n{$SIX_RULES}\n\n---\n",
+    'mcq'     => "Create exactly 5 multiple-choice questions from the material below.\n\nStructure:\n**Quick Quiz** 📝\nFor each question use:\n1. [Question]?\n   A) ...  B) ...  C) ...  D) ...\n   ✅ Answer: [letter]\n\nKeep questions short. No extra commentary.\n\n---\n",
+    'flashcard' => "Create exactly 8 flashcards from the material below.\n\nFormat each pair exactly:\nQ: [short question]\nA: [concise answer]\n\nNo extra text before or after.\n\n---\n",
+    'fill'    => "Create exactly 5 fill-in-the-blank questions from the material below.\n\nUse ___ for blanks. Then on a new line write:\n**Answers** ✅\n1. answer\n2. answer\n...\n\n---\n",
+];
+
+$img_mode_prompts = [
+    'explain'   => 'Read this image, extract the key content, then explain it simply. Use **Key Idea**, **Breakdown** (bullets), **Quick Example**, **Remember** (tip + emoji). Keep it brief.',
+    'mcq'       => 'Read this image and create 5 short MCQs. Format: numbered questions, A-D options, ✅ Answer per question.',
+    'flashcard' => 'Read this image and create 8 flashcards. Format: Q: ... A: ... only.',
+    'fill'      => 'Read this image and create 5 fill-in-the-blank questions with ___ blanks, then **Answers** ✅ section.',
+];
+
 $now = date('Y-m-d H:i:s');
 
 // ── IMAGE MODE (vision) ──────────────────────────────────────────────────────
@@ -52,26 +79,19 @@ if ($image_b64) {
         $remaining = 10 - $used;
     }
 
-    // Build vision prompt per mode
-    $img_prompts = [
-        'explain'   => 'Extract all readable text from this image, then explain the content in simple, clear terms for a university student. Use bullet points and short paragraphs. Be encouraging.',
-        'mcq'       => 'Extract the text from this image then generate 5 multiple choice questions (A, B, C, D) based on the content. Clearly mark the correct answer for each.',
-        'flashcard' => 'Extract the text from this image then create 8 flashcard pairs. Format each as:\nQ: [question]\nA: [answer]',
-        'fill'      => 'Extract the text from this image then create 5 fill-in-the-blank questions using ___ for blanks. After all questions write ANSWERS: and list the correct answers.',
-    ];
-    $img_prompt = $img_prompts[$mode] ?? $img_prompts['explain'];
+    $img_prompt = $img_mode_prompts[$mode] ?? $img_mode_prompts['explain'];
 
     $payload = json_encode([
         'model'    => 'meta-llama/llama-4-scout-17b-16e-instruct',
-        'messages' => [[
-            'role'    => 'user',
-            'content' => [
-                ['type' => 'text',      'text'      => 'You are Six, a helpful AI study assistant for university students in Ghana. ' . $img_prompt],
+        'messages' => [
+            ['role' => 'system', 'content' => $SIX_SYSTEM],
+            ['role' => 'user', 'content' => [
+                ['type' => 'text',      'text'      => $img_prompt],
                 ['type' => 'image_url', 'image_url' => ['url' => "data:{$img_mime};base64,{$image_b64}"]],
-            ],
-        ]],
-        'max_tokens'  => 1500,
-        'temperature' => 0.7,
+            ]],
+        ],
+        'max_tokens'  => 1000,
+        'temperature' => 0.6,
     ]);
 
     $ch = curl_init('https://api.groq.com/openai/v1/chat/completions');
@@ -108,6 +128,7 @@ if ($image_b64) {
 
 // ── TEXT MODE (existing logic) ───────────────────────────────────────────────
 if (!$text) json_error('No text provided.');
+if (!isset($mode_prompts[$mode])) json_error('Invalid mode. Use: explain, mcq, flashcard, or fill.');
 
 // 1. Check subscription
 $sub = $conn->prepare("SELECT id FROM ai_subscriptions WHERE student_id = ? AND status = 'active' AND end_date >= CURDATE() LIMIT 1");
@@ -140,31 +161,17 @@ if (!$has_subscription) {
 }
 
 // Build prompt
-switch ($mode) {
-    case 'explain':
-        $prompt = "You are Six, a friendly and smart AI study assistant helping university students in Ghana. Explain the following learning material in simple, clear, layman terms. Use short paragraphs and bullet points where helpful. Be encouraging and use relatable examples.\n\n---\n$text";
-        break;
-    case 'mcq':
-        $prompt = "You are Six, an AI study assistant. Generate 5 multiple choice questions based on the following material. For each question provide 4 options (A, B, C, D) and indicate the correct answer clearly. Number each question.\n\n---\n$text";
-        break;
-    case 'flashcard':
-        $prompt = "You are Six, an AI study assistant. Create 8 flashcard pairs from the following material. Format each one exactly like this:\nQ: [question]\nA: [answer]\n\nMake questions clear and concise.\n\n---\n$text";
-        break;
-    case 'fill':
-        $prompt = "You are Six, an AI study assistant. Create 5 fill-in-the-blank questions from the following material. Use ___ for the blank. After all questions write 'ANSWERS:' and list the correct answers numbered.\n\n---\n$text";
-        break;
-    default:
-        json_error('Invalid mode. Use: explain, mcq, flashcard, or fill.');
-}
+$prefix = $mode_prompts[$mode] ?? $mode_prompts['explain'];
+$prompt = $prefix . $text;
 
 $payload = json_encode([
     'model'    => 'llama-3.3-70b-versatile',
     'messages' => [
-        ['role' => 'system', 'content' => 'You are Six, a helpful and friendly AI study assistant for university students in Ghana. Be clear, encouraging, and educational.'],
+        ['role' => 'system', 'content' => $SIX_SYSTEM],
         ['role' => 'user',   'content' => $prompt],
     ],
-    'max_tokens'  => 1500,
-    'temperature' => 0.7,
+    'max_tokens'  => 1000,
+    'temperature' => 0.6,
 ]);
 
 $ch = curl_init('https://api.groq.com/openai/v1/chat/completions');
