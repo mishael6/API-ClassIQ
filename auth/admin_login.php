@@ -10,6 +10,21 @@ $password = trim($body['password'] ?? '');
 
 if (!$email || !$password) json_error('Email and password are required.');
 
+// Ensure admins table + session_token column exist
+$conn->query("CREATE TABLE IF NOT EXISTS admins (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    session_token VARCHAR(64) NULL DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_admin_token (session_token)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$col = $conn->query("SHOW COLUMNS FROM admins LIKE 'session_token'");
+if (!$col || $col->num_rows === 0) {
+    $conn->query("ALTER TABLE admins ADD COLUMN session_token VARCHAR(64) NULL DEFAULT NULL");
+}
+
 $stmt = $conn->prepare("SELECT id, name, email, password FROM admins WHERE email = ? LIMIT 1");
 $stmt->bind_param('s', $email);
 $stmt->execute();

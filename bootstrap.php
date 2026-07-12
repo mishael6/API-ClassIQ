@@ -124,6 +124,7 @@ function require_admin(mysqli $conn): array {
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
     if (!$row) json_error('Unauthorized', 401);
+    $row['role'] = 'admin';
     return $row;
 }
 

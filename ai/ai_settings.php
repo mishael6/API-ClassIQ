@@ -3,8 +3,7 @@
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../lib/ai_helpers.php';
 
-$user = require_auth($conn);
-if ($user['role'] !== 'admin') json_error('Admin access required.', 403);
+$user = require_admin($conn);
 
 // GET — fetch current settings and free grants
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
