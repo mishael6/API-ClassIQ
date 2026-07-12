@@ -9,7 +9,13 @@ $today        = date('Y-m-d');
 
 $total_students = (int)$conn->query("SELECT COUNT(*) AS c FROM students WHERE user_id = $lecturer_id")->fetch_assoc()['c'];
 $attendance_today = (int)$conn->query("SELECT COUNT(*) AS c FROM attendance WHERE lecturer_id = $lecturer_id AND attendance_date = '$today' AND deleted_at IS NULL")->fetch_assoc()['c'];
-$total_weeks = (int)$conn->query("SELECT COUNT(*) AS c FROM lecturer_weeks WHERE lecturer_id = $lecturer_id")->fetch_assoc()['c'];
+$total_semesters = (int)$conn->query("SELECT COUNT(*) AS c FROM lecturer_semesters WHERE lecturer_id = $lecturer_id")->fetch_assoc()['c'];
+$total_classes = (int)$conn->query("
+    SELECT COUNT(*) AS c FROM lecturer_classes c
+    JOIN lecturer_weeks w ON w.id = c.week_id
+    JOIN lecturer_semesters s ON s.id = w.semester_id
+    WHERE s.lecturer_id = $lecturer_id
+")->fetch_assoc()['c'];
 
 $last_row = $conn->query("SELECT MAX(time_marked) AS last FROM attendance WHERE lecturer_id = $lecturer_id AND deleted_at IS NULL")->fetch_assoc();
 $last_session = $last_row['last'] ? date('M j, g:i A', strtotime($last_row['last'])) : 'No sessions yet';
@@ -25,17 +31,20 @@ for ($i = 6; $i >= 0; $i--) {
     ];
 }
 
-$week_stats = $conn->query("
-    SELECT w.id, w.week_number, w.topic,
+$class_stats = $conn->query("
+    SELECT c.id AS class_id, c.class_number, c.topic,
+           w.week_number, s.id AS semester_id, s.name AS semester_name,
            COUNT(a.id) AS total_marks,
            SUM(CASE WHEN a.status = 'Present' THEN 1 ELSE 0 END) AS present_count,
            SUM(CASE WHEN a.status = 'Flagged' THEN 1 ELSE 0 END) AS flagged_count,
            MAX(a.attendance_date) AS last_date
-    FROM lecturer_weeks w
-    LEFT JOIN attendance a ON a.lecturer_id = w.lecturer_id AND a.week_number = w.week_number AND a.deleted_at IS NULL
-    WHERE w.lecturer_id = $lecturer_id
-    GROUP BY w.id
-    ORDER BY w.week_number ASC
+    FROM lecturer_classes c
+    JOIN lecturer_weeks w ON w.id = c.week_id
+    JOIN lecturer_semesters s ON s.id = w.semester_id
+    LEFT JOIN attendance a ON a.class_id = c.id AND a.lecturer_id = $lecturer_id AND a.deleted_at IS NULL
+    WHERE s.lecturer_id = $lecturer_id
+    GROUP BY c.id
+    ORDER BY s.name ASC, w.week_number ASC, c.class_number ASC
 ")->fetch_all(MYSQLI_ASSOC);
 
 $students = $conn->query("
@@ -59,11 +68,13 @@ json_ok([
     'stats' => [
         'total_students'   => $total_students,
         'attendance_today' => $attendance_today,
-        'total_weeks'      => $total_weeks,
+        'total_semesters'  => $total_semesters,
+        'total_classes'    => $total_classes,
         'last_session'     => $last_session,
         'pending_issues'   => $pending_issues,
     ],
-    'chart'      => $chart,
-    'week_stats' => $week_stats,
-    'students'   => $students,
+    'chart'        => $chart,
+    'class_stats'  => $class_stats,
+    'week_stats'   => $class_stats,
+    'students'     => $students,
 ]);

@@ -17,11 +17,14 @@ if ($method === 'GET') {
 
     $rows = $conn->query("
         SELECT u.id, u.name, u.email, u.institution, u.course, u.status, u.created_at,
-               COUNT(DISTINCT s.id) AS student_count,
-               COUNT(DISTINCT w.id) AS week_count
+               COUNT(DISTINCT st.id) AS student_count,
+               COUNT(DISTINCT sem.id) AS semester_count,
+               COUNT(DISTINCT cls.id) AS class_count
         FROM users u
-        LEFT JOIN students s ON s.user_id = u.id
-        LEFT JOIN lecturer_weeks w ON w.lecturer_id = u.id
+        LEFT JOIN students st ON st.user_id = u.id
+        LEFT JOIN lecturer_semesters sem ON sem.lecturer_id = u.id
+        LEFT JOIN lecturer_weeks w ON w.semester_id = sem.id
+        LEFT JOIN lecturer_classes cls ON cls.week_id = w.id
         WHERE $where
         GROUP BY u.id
         ORDER BY u.created_at DESC
@@ -95,7 +98,20 @@ if ($method === 'DELETE') {
     $conn->query("SET FOREIGN_KEY_CHECKS = 0");
     $conn->query("DELETE FROM attendance WHERE lecturer_id = $id");
     $conn->query("DELETE FROM qr_sessions WHERE lecturer_id = $id");
-    $conn->query("DELETE FROM lecturer_weeks WHERE lecturer_id = $id");
+    $semesters = $conn->query("SELECT id FROM lecturer_semesters WHERE lecturer_id = $id");
+    if ($semesters) {
+        while ($sem = $semesters->fetch_assoc()) {
+            $sid = (int)$sem['id'];
+            $weeks = $conn->query("SELECT id FROM lecturer_weeks WHERE semester_id = $sid");
+            if ($weeks) {
+                while ($wk = $weeks->fetch_assoc()) {
+                    $conn->query("DELETE FROM lecturer_classes WHERE week_id = " . (int)$wk['id']);
+                }
+            }
+            $conn->query("DELETE FROM lecturer_weeks WHERE semester_id = $sid");
+        }
+    }
+    $conn->query("DELETE FROM lecturer_semesters WHERE lecturer_id = $id");
     $conn->query("DELETE FROM students WHERE user_id = $id");
     $conn->query("DELETE FROM troubleshooting_logs WHERE user_id = $id");
     $conn->query("DELETE FROM users WHERE id = $id AND role = 'lecturer'");
