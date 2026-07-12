@@ -27,9 +27,10 @@ if ($email) {
     $upd->execute();
 
     unset($user['password']);
-    // Ensure the frontend receives 'classrep' instead of 'class_rep'
     if (!isset($user['role']) || $user['role'] === 'class_rep') {
         $user['role'] = 'classrep';
+    } elseif ($user['role'] === 'lecturer') {
+        $user['role'] = 'lecturer';
     }
     
     json_ok(['token' => $token, 'user' => $user]);

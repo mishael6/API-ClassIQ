@@ -86,13 +86,33 @@ function require_auth(mysqli $conn): array {
     $token = get_bearer_token();
     if (!$token) json_error('Unauthorized', 401);
 
-    // role can be 'class_rep' in DB
-    $stmt = $conn->prepare("SELECT id, name, email, role FROM users WHERE session_token = ? AND status = 'approved' LIMIT 1");
+    $stmt = $conn->prepare("
+        SELECT id, name, email, role, institution, department, program, course, phone, status
+        FROM users WHERE session_token = ? AND status = 'approved' LIMIT 1
+    ");
     $stmt->bind_param('s', $token);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
     if (!$row) json_error('Unauthorized', 401);
-    return $row;
+
+    require_once __DIR__ . '/lib/lecturer_helpers.php';
+    return normalize_user_role($row);
+}
+
+function require_classrep(mysqli $conn): array {
+    $user = require_auth($conn);
+    if (!in_array($user['role'] ?? '', ['classrep', 'class_rep'], true)) {
+        json_error('Class rep access only.', 403);
+    }
+    return $user;
+}
+
+function require_lecturer(mysqli $conn): array {
+    $user = require_auth($conn);
+    if (($user['role'] ?? '') !== 'lecturer') {
+        json_error('Lecturer access only.', 403);
+    }
+    return $user;
 }
 
 function require_admin(mysqli $conn): array {

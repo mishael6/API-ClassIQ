@@ -10,7 +10,7 @@ if ($method === 'GET') {
     $search = $conn->real_escape_string($_GET['search'] ?? '');
     $status = $conn->real_escape_string($_GET['status'] ?? '');
 
-    $where = '1=1';
+    $where = "u.role IN ('class_rep', 'classrep')";
     if ($search) $where .= " AND (u.name LIKE '%$search%' OR u.email LIKE '%$search%')";
     if ($status) $where .= " AND u.status = '$status'";
 
@@ -82,6 +82,15 @@ if ($method === 'PUT') {
             ? "Dear {$user['name']},\n\nYour ClassIQ account has been approved!\n\n— ClassIQ Team"
             : "Dear {$user['name']},\n\nYour ClassIQ registration has been rejected.\n\n— ClassIQ Team";
         @mail($user['email'], 'ClassIQ Account Update', $body_text, "From: ClassIQ <noreply@classiq.app>");
+
+        require_once __DIR__ . '/../lib/lecturer_helpers.php';
+        if ($action === 'approve') {
+            send_classiq_mail(
+                $user['email'],
+                'Your ClassIQ Account Has Been Approved',
+                "Dear {$user['name']},\n\nYour ClassIQ class rep account has been approved!\n\nYou can now log in at the ClassIQ portal using the email and password you registered with.\n\n— ClassIQ Team\nclassiq660@gmail.com"
+            );
+        }
 
         // ── Fire Payloqa Authentication Hint SMS ──
         if ($action === 'approve' && !empty($user['phone'])) {
