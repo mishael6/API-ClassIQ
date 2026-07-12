@@ -11,6 +11,7 @@ $rows = $conn->query("
            ) AS unread_count
     FROM troubleshooting_logs t
     WHERE t.user_id = $classrep_id
+      AND (t.user_type IS NULL OR t.user_type = '' OR t.user_type = 'classrep')
     ORDER BY t.created_at DESC
 ")->fetch_all(MYSQLI_ASSOC);
 

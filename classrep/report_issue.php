@@ -14,7 +14,7 @@ $message = trim($body['message'] ?? '');
 if (!$subject || !$message) json_error('Subject and message are required.');
 
 $full_message = "Subject: {$subject}\n\n{$message}";
-$stmt = $conn->prepare("INSERT INTO troubleshooting_logs (user_id, message, status, created_at) VALUES (?, ?, 'pending', NOW())");
+$stmt = $conn->prepare("INSERT INTO troubleshooting_logs (user_id, message, status, created_at, user_type) VALUES (?, ?, 'pending', NOW(), 'classrep')");
 $stmt->bind_param('is', $classrep_id, $full_message);
 
 if (!$stmt->execute()) json_error('Failed to submit report.');
