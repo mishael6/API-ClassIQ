@@ -15,20 +15,25 @@ if ($method === 'GET') {
     if ($search) $where .= " AND (u.name LIKE '%$search%' OR u.email LIKE '%$search%' OR u.course LIKE '%$search%')";
     if ($status) $where .= " AND u.status = '$status'";
 
-    $rows = $conn->query("
+    $result = $conn->query("
         SELECT u.id, u.name, u.email, u.institution, u.course, u.status, u.created_at,
                COUNT(DISTINCT st.id) AS student_count,
                COUNT(DISTINCT sem.id) AS semester_count,
-               COUNT(DISTINCT cls.id) AS class_count
+               COUNT(DISTINCT coh.id) AS class_count
         FROM users u
         LEFT JOIN students st ON st.user_id = u.id
         LEFT JOIN lecturer_semesters sem ON sem.lecturer_id = u.id
-        LEFT JOIN lecturer_weeks w ON w.semester_id = sem.id
-        LEFT JOIN lecturer_classes cls ON cls.week_id = w.id
+        LEFT JOIN lecturer_cohorts coh ON coh.lecturer_id = u.id
         WHERE $where
         GROUP BY u.id
         ORDER BY u.created_at DESC
-    ")->fetch_all(MYSQLI_ASSOC);
+    ");
+
+    if (!$result) {
+        json_error('Failed to load lecturers: ' . $conn->error, 500);
+    }
+
+    $rows = $result->fetch_all(MYSQLI_ASSOC);
 
     json_ok(['lecturers' => $rows]);
 }
