@@ -16,7 +16,7 @@ $sub->execute();
 $row = $sub->get_result()->fetch_assoc();
 
 if ($check_only) {
-    json_ok(['subscribed' => !empty($row), 'end_date' => $row['end_date'] ?? null]);
+    json_ok(['subscribed' => true, 'end_date' => $row['end_date'] ?? null, 'free' => true]);
 }
 
 if ($row) {

@@ -102,6 +102,8 @@ if ($image_b64) {
         $grant->execute();
         if ($grant->get_result()->num_rows > 0) $has_subscription = true;
     }
+    // Six study tools are free for every student.
+    $has_subscription = true;
     if (!$has_subscription) {
         $window_start = date('Y-m-d H:i:s', strtotime('-2 hours'));
         $usage = $conn->prepare("SELECT count, window_start FROM ai_usage WHERE student_id = ? AND window_start >= ? ORDER BY window_start DESC LIMIT 1");
@@ -187,6 +189,9 @@ if (!$has_subscription) {
     $grant->execute();
     if ($grant->get_result()->num_rows > 0) $has_subscription = true;
 }
+
+// Six study tools are free for every student.
+$has_subscription = true;
 
 // 3. Check 2hr window usage
 $remaining = null;

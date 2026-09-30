@@ -30,6 +30,9 @@ if (!$has_subscription) {
     if ($has_free_grant) $has_subscription = true;
 }
 
+// Trivia generation is free for every student.
+$has_subscription = true;
+
 if (!$has_subscription) {
     $window_start = date('Y-m-d H:i:s', strtotime('-2 hours'));
     $usage = $conn->prepare("SELECT count, window_start FROM ai_usage WHERE student_id = ? AND window_start >= ? ORDER BY window_start DESC LIMIT 1");

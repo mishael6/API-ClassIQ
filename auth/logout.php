@@ -10,6 +10,10 @@ if ($token) {
     $stmt2 = $conn->prepare("UPDATE admins SET session_token = NULL WHERE session_token = ?");
     $stmt2->bind_param('s', $token);
     $stmt2->execute();
+
+    $stmt3 = $conn->prepare("UPDATE students SET session_token = NULL WHERE session_token = ?");
+    $stmt3->bind_param('s', $token);
+    $stmt3->execute();
 }
 
 json_ok(['message' => 'Logged out.']);
