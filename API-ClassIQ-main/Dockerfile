@@ -4,7 +4,8 @@ FROM php:8.2-fpm-alpine
 RUN apk add --no-cache nginx
 
 # Install mysqli + ensure openssl is available
-RUN docker-php-ext-install mysqli
+RUN docker-php-ext-install mysqli \
+    && php -r "exit(defined('MYSQLI_CLIENT_SSL_VERIFY_SERVER_CERT') ? 0 : 1);"
 
 # Nginx config
 RUN mkdir -p /run/nginx
