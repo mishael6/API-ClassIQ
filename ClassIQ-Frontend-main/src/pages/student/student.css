@@ -1,0 +1,83 @@
+.student-page {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+  background-image:
+    linear-gradient(rgba(0,102,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,102,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.student-card {
+  background: var(--surface);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border);
+  padding: 36px 32px;
+  width: 100%; max-width: 480px;
+}
+
+.student-logo {
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; margin-bottom: 20px;
+}
+.s-logo-text {
+  font-family: var(--font-head); font-size: 1.5rem; font-weight: 800;
+  color: var(--txt);
+}
+
+.student-title { font-family: var(--font-head); font-size: 1.4rem; font-weight: 800; text-align: center; margin-bottom: 4px; }
+.student-sub   { text-align: center; color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+
+.instructions-toggle {
+  width: 100%; padding: 10px 16px;
+  background: var(--bg); border: 1.5px solid var(--border);
+  border-radius: var(--radius); color: var(--blue);
+  font-size: 0.88rem; font-weight: 600; cursor: pointer;
+  margin-bottom: 12px; transition: all 0.2s;
+  font-family: var(--font-body);
+}
+.instructions-toggle:hover { background: var(--blue-lt); border-color: var(--blue); }
+
+.instructions-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; margin-bottom: 14px;
+  font-size: 0.85rem;
+}
+.instructions-list { padding-left: 20px; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.instructions-warn {
+  background: var(--orange-lt); border-left: 3px solid var(--orange);
+  padding: 10px 12px; border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 0.82rem; color: #92400e; margin-top: 10px;
+}
+
+.gps-banner {
+  padding: 10px 14px; border-radius: var(--radius);
+  font-size: 0.85rem; font-weight: 600; margin-bottom: 16px;
+  text-align: center;
+}
+.gps-waiting     { background: var(--orange-lt); color: #92400e; border: 1px solid #fde68a; }
+.gps-ok          { background: var(--green-lt);  color: #065f46; border: 1px solid #6ee7b7; }
+.gps-denied,
+.gps-unsupported { background: var(--red-lt);    color: #991b1b; border: 1px solid #fca5a5; }
+
+.student-form { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+
+.student-error-state,
+.student-success-state {
+  text-align: center; padding: 32px 0;
+}
+.error-icon   { font-size: 3rem; margin-bottom: 12px; }
+.success-icon { color: var(--green); margin-bottom: 12px; display: flex; justify-content: center; }
+.student-error-state h2, .student-success-state h2 {
+  font-family: var(--font-head); font-size: 1.3rem; margin-bottom: 8px;
+}
+.student-error-state p, .student-success-state p { color: var(--muted); font-size: 0.9rem; }
+.close-hint { margin-top: 12px; font-size: 0.78rem !important; }
+
+.hidden { display: none; }
+
+@media (max-width: 480px) {
+  .student-card { padding: 24px 20px; }
+}

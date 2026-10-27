@@ -1,0 +1,144 @@
+.ri-empty {
+  text-align: center;
+  padding: 64px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted2);
+}
+.ri-empty p    { font-size: 0.95rem; font-weight: 600; color: var(--muted); }
+.ri-empty span { font-size: 0.82rem; }
+
+.ri-list { display: flex; flex-direction: column; gap: 0; }
+
+.ri-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-body);
+  transition: background 0.15s;
+}
+.ri-item:last-child { border-bottom: none; }
+.ri-item:hover { background: var(--bg); }
+.ri-item-unread { background: #fffbeb; }
+
+.ri-item-icon {
+  width: 38px; height: 38px;
+  background: var(--blue-lt);
+  color: var(--blue);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.ri-item-unread .ri-item-icon { background: var(--orange-lt); color: var(--orange); }
+
+.ri-item-content { flex: 1; min-width: 0; }
+
+.ri-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.ri-item-subject {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--txt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ri-item-time {
+  font-size: 0.68rem;
+  color: var(--muted2);
+  flex-shrink: 0;
+}
+
+.ri-item-bottom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ri-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.ri-status-resolved { color: var(--green); }
+.ri-status-pending  { color: var(--orange); }
+
+.ri-unread {
+  background: var(--blue);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+
+/* Thread header */
+.ri-thread-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.ri-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-family: var(--font-body);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.ri-back-btn:hover { background: var(--bg); color: var(--txt); }
+
+.ri-thread-subject {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--txt);
+  margin-bottom: 3px;
+}
+
+.ri-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #10b981;
+  letter-spacing: 0.02em;
+}
+
+/* Chat messages for classrep view */
+.ri-chat-messages {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 300px;
+  max-height: 460px;
+  overflow-y: auto;
+}

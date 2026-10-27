@@ -1,0 +1,36 @@
+.lec-stu-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.lec-stu-tab {
+  background: none;
+  border: none;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.lec-stu-tab.active {
+  color: var(--blue);
+  background: var(--blue-lt);
+}
+
+.lec-att-stu-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--blue);
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.lec-att-stu-link:hover {
+  text-decoration: underline;
+}

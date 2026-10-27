@@ -1,0 +1,195 @@
+<?php
+// api/bootstrap.php
+
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
+date_default_timezone_set('Africa/Accra');
+
+// ── Always return JSON even on fatal errors ───────────────────
+register_shutdown_function(function () {
+    $err = error_get_last();
+    if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        if (!headers_sent()) {
+            http_response_code(500);
+            header('Content-Type: application/json');
+        }
+        echo json_encode([
+            'success' => false,
+            'message' => 'Server error: ' . $err['message'] . ' in ' . basename($err['file']) . ' line ' . $err['line']
+        ]);
+    }
+});
+
+// ── CORS ──────────────────────────────────────────────────────
+$allowed_origins = [
+    'https://class-iq.netlify.app',
+    'https://app-class-iq.netlify.app',
+    'https://mobile-classiq.netlify.app',
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost:8081',
+];
+
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+
+if (in_array($origin, $allowed_origins)) {
+    header("Access-Control-Allow-Origin: $origin");
+} else {
+    header('Access-Control-Allow-Origin: *');
+}
+
+header('Access-Control-Allow-Credentials: true');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+header('Content-Type: application/json');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
+
+// ── DB ────────────────────────────────────────────────────────
+require_once __DIR__ . '/db.php';
+$conn->query("SET time_zone = '+00:00'");
+
+// ── Auth helpers ──────────────────────────────────────────────
+function get_bearer_token(): ?string {
+    $h = $_SERVER['HTTP_AUTHORIZATION']
+      ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+      ?? '';
+
+    if (!$h && function_exists('apache_request_headers')) {
+        $headers = apache_request_headers();
+        $h = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+    }
+
+    if (preg_match('/Bearer\s+(.+)/i', $h, $m)) return trim($m[1]);
+    return null;
+}
+
+function require_student(mysqli $conn): array {
+    $token = get_bearer_token();
+    if (!$token) json_error('Unauthorized', 401);
+
+    $stmt = $conn->prepare("SELECT id, name, email FROM students WHERE session_token = ? LIMIT 1");
+    $stmt->bind_param('s', $token);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    if (!$row) json_error('Unauthorized', 401);
+    
+    // Update last_seen
+    $conn->query("UPDATE students SET last_seen = NOW() WHERE id = " . (int)$row['id']);
+    
+    return $row;
+}
+
+function require_auth(mysqli $conn): array {
+    $token = get_bearer_token();
+    if (!$token) json_error('Unauthorized', 401);
+
+    $stmt = $conn->prepare("
+        SELECT id, name, email, role, institution, department, program, course, phone, status
+        FROM users WHERE session_token = ? AND status = 'approved' LIMIT 1
+    ");
+    $stmt->bind_param('s', $token);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    if (!$row) json_error('Unauthorized', 401);
+
+    require_once __DIR__ . '/lib/lecturer_helpers.php';
+    return normalize_user_role($row);
+}
+
+function require_classrep(mysqli $conn): array {
+    $user = require_auth($conn);
+    if (!in_array($user['role'] ?? '', ['classrep', 'class_rep'], true)) {
+        json_error('Class rep access only.', 403);
+    }
+    return $user;
+}
+
+function require_lecturer(mysqli $conn): array {
+    $user = require_auth($conn);
+    if (($user['role'] ?? '') !== 'lecturer') {
+        json_error('Lecturer access only.', 403);
+    }
+    return $user;
+}
+
+function require_admin(mysqli $conn): array {
+    $token = get_bearer_token();
+    if (!$token) json_error('Unauthorized', 401);
+
+    $stmt = $conn->prepare("SELECT id, name, email FROM admins WHERE session_token = ? LIMIT 1");
+    $stmt->bind_param('s', $token);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    if (!$row) json_error('Unauthorized', 401);
+    $row['role'] = 'admin';
+    return $row;
+}
+
+// ── Student-facing URLs (QR scan, registration links) ─────────
+function student_frontend_url(): string {
+    $url = trim(getenv('FRONTEND_URL') ?: '');
+    return $url !== '' ? rtrim($url, '/') : 'https://class-iq.netlify.app';
+}
+
+// ── Response helpers ──────────────────────────────────────────
+function json_ok(array $data = [], int $code = 200): void {
+    http_response_code($code);
+    echo json_encode(array_merge(['success' => true], $data));
+    exit;
+}
+
+function json_error(string $message, int $code = 400): void {
+    http_response_code($code);
+    echo json_encode(['success' => false, 'message' => $message]);
+    exit;
+}
+
+function get_body(): array {
+    $raw = file_get_contents('php://input');
+    return json_decode($raw, true) ?? [];
+}
+
+function haversine(float $lat1, float $lng1, float $lat2, float $lng2): float {
+    $R    = 6371000;
+    $dLat = deg2rad($lat2 - $lat1);
+    $dLng = deg2rad($lng2 - $lng1);
+    $a    = sin($dLat/2)**2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng/2)**2;
+    return $R * 2 * atan2(sqrt($a), sqrt(1 - $a));
+}
+
+function send_admin_sms(string $phone, string $message): void {
+    $api_key     = getenv('PAYLOQA_API_KEY')     ?: 'pk_live_of502pjkel';
+    $platform_id = getenv('PAYLOQA_PLATFORM_ID') ?: 'plat_xvadsq3rx0f';
+    $sender_id   = getenv('PAYLOQA_SENDER')      ?: 'ClassIQ';
+
+    // Format to E.164
+    $phone = preg_replace('/\D/', '', $phone);
+    if (strlen($phone) === 10 && str_starts_with($phone, '0')) $phone = '+233' . substr($phone, 1);
+    elseif (strlen($phone) === 9) $phone = '+233' . $phone;
+    elseif (strlen($phone) === 12 && str_starts_with($phone, '233')) $phone = '+' . $phone;
+
+    $payload = json_encode([
+        'recipient_number'   => $phone,
+        'sender_id'          => $sender_id,
+        'message'            => substr($message, 0, 155),
+        'usage_message_type' => 'notification',
+    ]);
+
+    $ch = curl_init('https://sms.payloqa.com/api/v1/sms/send');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'X-API-Key: '     . $api_key,
+            'X-Platform-Id: ' . $platform_id,
+        ],
+        CURLOPT_TIMEOUT => 5, // Prevent server freeze
+    ]);
+    curl_exec($ch);
+    curl_close($ch);
+}

@@ -1,0 +1,314 @@
+/* ── Attendance page layout ── */
+.att-page { max-width: 1100px; }
+
+.att-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+@media (max-width: 768px) {
+  .att-summary { grid-template-columns: repeat(2, 1fr); }
+}
+
+.att-summary-card {
+  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  animation: attFadeUp 0.45s ease both;
+}
+.att-summary-card:nth-child(1) { animation-delay: 0.05s; }
+.att-summary-card:nth-child(2) { animation-delay: 0.1s; }
+.att-summary-card:nth-child(3) { animation-delay: 0.15s; }
+.att-summary-card:nth-child(4) { animation-delay: 0.2s; }
+
+.att-summary-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.att-summary-value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  font-family: var(--font-head);
+  line-height: 1;
+}
+
+/* ── Date sections ── */
+.att-date-section {
+  margin-bottom: 28px;
+  animation: attFadeUp 0.5s ease both;
+}
+
+.att-date-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: var(--radius-lg);
+  margin-bottom: 14px;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.25);
+}
+
+.att-date-title {
+  font-family: var(--font-head);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.att-date-sub {
+  font-size: 0.78rem;
+  opacity: 0.85;
+  margin-top: 3px;
+  font-weight: 500;
+}
+
+.att-date-badge {
+  background: rgba(255,255,255,0.2);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ── Lecture subsections ── */
+.att-lecture-section {
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 12px;
+  background: var(--surface);
+  overflow: hidden;
+  animation: attFadeUp 0.4s ease both;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+.att-lecture-section:hover {
+  border-color: rgba(0, 102, 255, 0.25);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.att-lecture-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  cursor: pointer;
+  user-select: none;
+  background: var(--bg);
+  border-bottom: 1px solid transparent;
+  transition: background 0.15s;
+}
+.att-lecture-head:hover { background: var(--blue-lt); }
+.att-lecture-section.is-open .att-lecture-head {
+  border-bottom-color: var(--border);
+}
+
+.att-lecture-title-wrap { flex: 1; min-width: 0; }
+.att-lecture-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--txt);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.att-lecture-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.att-lecture-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.att-lecture-pill.present { color: var(--green); border-color: rgba(56,161,105,0.3); background: rgba(56,161,105,0.08); }
+.att-lecture-pill.flagged { color: var(--red); border-color: rgba(229,62,62,0.3); background: rgba(229,62,62,0.08); }
+.att-lecture-pill.outside { color: var(--orange); border-color: rgba(214,158,46,0.3); background: rgba(214,158,46,0.08); }
+
+.att-chevron {
+  transition: transform 0.25s ease;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.att-lecture-section.is-open .att-chevron { transform: rotate(180deg); }
+
+.att-lecture-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s ease, opacity 0.25s ease;
+  opacity: 0;
+}
+.att-lecture-section.is-open .att-lecture-body {
+  max-height: 4000px;
+  opacity: 1;
+}
+
+.att-lecture-inner { padding: 16px 18px 18px; }
+
+.att-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--border);
+}
+
+/* ── Student cards (replace table feel) ── */
+.att-student-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.att-student-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  animation: attFadeUp 0.35s ease both;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.att-student-card:hover {
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.att-student-card.row-flagged { border-left: 3px solid var(--red); background: rgba(229,62,62,0.04); }
+.att-student-card.row-outside { border-left: 3px solid var(--orange); background: rgba(214,158,46,0.04); }
+.att-student-card.row-present { border-left: 3px solid var(--green); }
+
+.att-stu-avatar {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--blue), #0099ff);
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 0.72rem; font-weight: 800;
+  font-family: var(--font-head); flex-shrink: 0;
+}
+
+.att-stu-info { flex: 1; min-width: 0; }
+.att-stu-name { font-size: 0.88rem; font-weight: 700; color: var(--txt); }
+.att-stu-index { font-size: 0.72rem; color: var(--muted); font-family: monospace; margin-top: 2px; }
+
+.att-stu-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.att-stu-time { font-size: 0.72rem; color: var(--muted); font-weight: 600; }
+
+/* ── Empty state ── */
+.att-empty {
+  text-align: center;
+  padding: 56px 24px;
+  animation: attFadeUp 0.5s ease;
+}
+.att-empty-icon { font-size: 3rem; margin-bottom: 12px; }
+.att-empty-title { font-size: 1.1rem; font-weight: 800; color: var(--txt); margin-bottom: 6px; }
+.att-empty-sub { font-size: 0.88rem; color: var(--muted); }
+
+/* ── Animations ── */
+@keyframes attFadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Add Student Modal ── */
+.add-stu-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.add-stu-search-icon {
+  position: absolute; left: 10px;
+  color: var(--muted); pointer-events: none;
+}
+.add-stu-search-input {
+  width: 100%;
+  padding: 9px 32px 9px 32px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  font-family: var(--font-body);
+  color: var(--txt);
+  background: var(--bg);
+  transition: border-color 0.2s;
+}
+.add-stu-search-input:focus { outline: none; border-color: var(--blue); }
+.add-stu-search-clear {
+  position: absolute; right: 10px;
+  background: none; border: none;
+  color: var(--muted); cursor: pointer;
+  font-size: 1rem; line-height: 1; padding: 2px 4px;
+}
+
+.add-stu-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.add-stu-empty {
+  text-align: center;
+  padding: 24px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.add-stu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-body);
+  transition: background 0.15s;
+}
+.add-stu-item:last-child { border-bottom: none; }
+.add-stu-item:hover { background: var(--blue-lt); }
+.add-stu-selected { background: var(--blue-lt) !important; }
+
+.add-stu-avatar {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--blue), #0099ff);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 0.68rem; font-weight: 800;
+  font-family: var(--font-head); flex-shrink: 0;
+}
+.add-stu-selected .add-stu-avatar { background: linear-gradient(135deg, var(--green), #059669); }
+
+.add-stu-info {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+}
+.add-stu-name  { font-size: 0.85rem; font-weight: 700; color: var(--txt); }
+.add-stu-index { font-size: 0.72rem; color: var(--muted); font-family: monospace; }
+.add-stu-check { font-size: 1rem; flex-shrink: 0; }

@@ -1,0 +1,4 @@
+/api/*          https://api-classiq.onrender.com/:splat  200!
+/privacy.html   /privacy.html  200!
+/payment.html   /payment.html  200!
+/*              /index.html  200

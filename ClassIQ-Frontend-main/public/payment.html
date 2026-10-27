@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Six is free</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #F5F7FA;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 24px;
+      padding: 40px 32px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 4px 40px rgba(0,0,0,0.10);
+      text-align: center;
+    }
+    img { width: 56px; height: 56px; object-fit: contain; margin-bottom: 16px; }
+    h1 { font-size: 24px; font-weight: 800; color: #0D1B2A; margin-bottom: 8px; }
+    p { font-size: 14px; color: #4A5568; margin-bottom: 24px; line-height: 1.6; }
+    ul { list-style: none; display: flex; flex-direction: column; gap: 8px; text-align: left; margin-bottom: 24px; }
+    li { font-size: 14px; color: #0D1B2A; font-weight: 500; }
+    .hint { font-size: 13px; color: #9AA5B4; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="/logo.png" alt="ClassIQ" />
+    <h1>Six is free</h1>
+    <p id="greeting">Explanations, MCQs, flashcards, fill-in-the-blank questions, and PDF upload are free. No payment is required.</p>
+    <ul>
+      <li>Unlimited AI explanations</li>
+      <li>Unlimited MCQ generation</li>
+      <li>Unlimited flashcards</li>
+      <li>Fill-in-the-blank questions</li>
+      <li>PDF upload</li>
+    </ul>
+    <p class="hint">Go back to the ClassIQ app to continue studying.</p>
+  </div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const studentName = decodeURIComponent(params.get('name') || 'Student');
+    document.getElementById('greeting').textContent =
+      `Hi ${studentName}. Explanations, MCQs, flashcards, fill-in-the-blank questions, and PDF upload are free. No payment is required.`;
+  </script>
+</body>
+</html>

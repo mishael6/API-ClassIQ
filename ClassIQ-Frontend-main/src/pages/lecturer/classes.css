@@ -1,0 +1,102 @@
+.classes-page { padding-bottom: 40px; }
+
+.classes-search-row {
+  margin-bottom: 16px;
+}
+
+
+.classes-empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.class-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.class-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+}
+
+.class-name {
+  font-family: var(--font-head);
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.class-count {
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.class-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.class-reg-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.class-reg-input {
+  flex: 1;
+  font-size: 0.78rem;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--muted);
+  min-width: 0;
+}
+
+.class-students {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.class-stu-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.class-stu-toolbar span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.class-stu-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 12px 0;
+}

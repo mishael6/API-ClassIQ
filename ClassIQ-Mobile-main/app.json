@@ -1,0 +1,68 @@
+{
+  "expo": {
+    "name": "ClassIQ",
+    "slug": "ClassIQ-Mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/user-verification.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/user-verification.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1A73E8"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.classiq.mobile",
+      "icon": "./assets/user-verification.png",
+      "infoPlist": {
+        "NSCameraUsageDescription": "ClassIQ uses the camera to scan QR codes for attendance.",
+        "NSLocationWhenInUseUsageDescription": "ClassIQ uses your location to verify attendance at the correct venue."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/user-verification.png",
+        "backgroundColor": "#1A73E8"
+      },
+      "package": "com.classiq.mobile",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "INTERNET",
+        "VIBRATE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/user-verification.png",
+      "bundler": "metro",
+      "output": "single",
+      "template": "./web/index.html"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow ClassIQ to access your camera to scan QR codes for attendance."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow ClassIQ to use your location to verify attendance at the correct venue.",
+          "locationAlwaysAndWhenInUsePermission": "Allow ClassIQ to use your location to verify attendance at the correct venue."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0c4ea012-8fa0-4c2e-bde7-66c901f22c6b"
+      },
+      "privacyPolicyUrl": "https://class-iq.netlify.app/privacy"
+    },
+    "owner": "mishael.six"
+  }
+}
