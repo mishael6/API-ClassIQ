@@ -53,7 +53,7 @@ function send_morning_motivation(mysqli $conn): array {
     }
 
     $body  = pick_daily_message('motivation');
-    $title = 'Good morning from ClassIQ ☀️';
+    $title = 'Good morning from ClassIQ';
     $result = broadcast_push($conn, $title, $body, 'student', null, 'motivation');
 
     log_daily_push($conn, 'motivation', $title, $body, $result['sent']);
@@ -75,7 +75,7 @@ function send_feature_tip(mysqli $conn): array {
     }
 
     $body  = pick_daily_message('feature');
-    $title = 'ClassIQ Tip 💡';
+    $title = 'ClassIQ Tip';
     $result = broadcast_push($conn, $title, $body, 'student', null, 'feature');
 
     log_daily_push($conn, 'feature', $title, $body, $result['sent']);

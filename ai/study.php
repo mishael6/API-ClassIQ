@@ -33,7 +33,7 @@ $SIX_SYSTEM_CHAT = 'You are Six, a warm AI study tutor for university students i
     . 'Clarify, elaborate, give examples, or quiz them as requested. '
     . 'Use **bold** for key terms, bullets when helpful, and speak naturally.';
 
-$SIX_RULES = "\n\nKeep your response well-structured and easy to read.\n";
+$SIX_RULES = "\n\nKeep your response well-structured and easy to read. Do not use emojis.\n";
 
 $mode_prompts = [
     'explain' => "Teach the following study material to the student. Give a proper explanation they can learn from:\n\n"
@@ -44,20 +44,20 @@ $mode_prompts = [
         . "**Quick Check** — 2 short questions they can ask you if still confused\n"
         . "{$SIX_RULES}\n---\n",
     'mcq'     => "Create 5 multiple-choice questions from the material below to test understanding.\n\n"
-        . "**Practice Quiz** 📝\n"
-        . "For each question:\n1. [Clear question]?\n   A) ...  B) ...  C) ...  D) ...\n   ✅ Answer: [letter] — [one-line explanation why]\n\n"
+        . "**Practice Quiz**\n"
+        . "For each question:\n1. [Clear question]?\n   A) ...  B) ...  C) ...  D) ...\n   Answer: [letter] — [one-line explanation why]\n\n"
         . "Make questions meaningful, not trivial.\n---\n",
     'flashcard' => "Create 8 flashcards from the material below for revision.\n\n"
         . "Format each pair exactly:\nQ: [clear question]\nA: [complete but concise answer]\n\n---\n",
     'fill'    => "Create 5 fill-in-the-blank questions from the material below.\n\n"
-        . "Use ___ for each blank. After all questions write:\n**Answers** ✅\n1. answer\n...\n\n---\n",
+        . "Use ___ for each blank. After all questions write:\n**Answers**\n1. answer\n...\n\n---\n",
 ];
 
 $img_mode_prompts = [
     'explain'   => 'Read this image and teach the content properly. Use **Overview**, **Core Concepts** (bullets), **Worked Example**, and **Why It Matters**. Explain clearly so the student learns.',
-    'mcq'       => 'Read this image and create 5 MCQs with A-D options. Add ✅ Answer and a brief why for each.',
+    'mcq'       => 'Read this image and create 5 MCQs with A-D options. Add an Answer label and a brief explanation for each. Do not use emojis.',
     'flashcard' => 'Read this image and create 8 flashcards. Format: Q: ... A: ... only.',
-    'fill'      => 'Read this image and create 5 fill-in-the-blank questions with ___ blanks, then **Answers** ✅ section.',
+    'fill'      => 'Read this image and create 5 fill-in-the-blank questions with ___ blanks, then an **Answers** section. Do not use emojis.',
 ];
 
 function six_parse_history(array $raw): array {
