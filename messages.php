@@ -25,7 +25,7 @@ if ($admin) {
 
 // Try classrep
 if (!$sender_role) {
-    $c = $conn->prepare("SELECT id FROM users WHERE session_token = ? AND status = 'approved' LIMIT 1");
+    $c = $conn->prepare("SELECT id FROM users WHERE session_token = ? AND status = 'approved' AND role IN ('class_rep', 'classrep') LIMIT 1");
     $c->bind_param('s', $token);
     $c->execute();
     $classrep = $c->get_result()->fetch_assoc();

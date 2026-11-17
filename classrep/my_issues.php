@@ -1,18 +1,22 @@
 <?php
 // api/classrep/my_issues.php
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../lib/messages_helpers.php';
 $user        = require_auth($conn);
 $classrep_id = $user['id'];
+ensure_messages_table($conn);
 
 $rows = $conn->query("
     SELECT t.id, t.message, t.status, t.created_at,
+           COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.issue_id = t.id), t.created_at) AS last_activity_at,
+           (SELECT m.message FROM messages m WHERE m.issue_id = t.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_reply,
            (SELECT COUNT(*) FROM messages m
             WHERE m.issue_id = t.id AND m.sender_role = 'admin' AND m.is_read = 0
            ) AS unread_count
     FROM troubleshooting_logs t
     WHERE t.user_id = $classrep_id
       AND (t.user_type IS NULL OR t.user_type = '' OR t.user_type = 'classrep')
-    ORDER BY t.created_at DESC
+    ORDER BY last_activity_at DESC, t.id DESC
 ")->fetch_all(MYSQLI_ASSOC);
 
 foreach ($rows as &$row) {

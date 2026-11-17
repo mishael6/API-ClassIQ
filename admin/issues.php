@@ -1,7 +1,9 @@
 <?php
 // api/admin/issues.php
 require_once __DIR__ . '/../bootstrap.php';
+require_once __DIR__ . '/../lib/messages_helpers.php';
 require_admin($conn);
+ensure_messages_table($conn);
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -12,16 +14,18 @@ if ($method === 'GET') {
 
     $rows = $conn->query("
         SELECT t.id, t.message, t.status, t.created_at,
-               COALESCE(t.user_type, 'classrep') AS user_type,
+               COALESCE(NULLIF(t.user_type, ''), 'classrep') AS user_type,
                COALESCE(u.name, s.name)  AS classrep_name,
                COALESCE(u.email, s.email) AS classrep_email,
                COALESCE(u.id, s.id)      AS classrep_id,
+               COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.issue_id = t.id), t.created_at) AS last_activity_at,
+               (SELECT m.message FROM messages m WHERE m.issue_id = t.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_reply,
                (SELECT COUNT(*) FROM messages m WHERE m.issue_id = t.id AND m.is_read = 0 AND m.sender_role IN ('classrep','student')) AS unread_count
         FROM troubleshooting_logs t
-        LEFT JOIN users u ON u.id = t.user_id AND (t.user_type IS NULL OR t.user_type = 'classrep')
+        LEFT JOIN users u ON u.id = t.user_id AND (t.user_type IS NULL OR t.user_type = '' OR t.user_type = 'classrep')
         LEFT JOIN students s ON s.id = t.user_id AND t.user_type = 'student'
         $where
-        ORDER BY t.created_at DESC
+        ORDER BY last_activity_at DESC, t.id DESC
         LIMIT 200
     ")->fetch_all(MYSQLI_ASSOC);
 
