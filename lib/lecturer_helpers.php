@@ -120,6 +120,30 @@ function ensure_lecturer_schema(mysqli $conn): void {
     lecturer_ensure_column($conn, 'attendance', 'cohort_id', 'cohort_id INT NULL DEFAULT NULL');
     lecturer_ensure_column($conn, 'attendance', 'semester_id', 'semester_id INT NULL DEFAULT NULL');
     lecturer_ensure_column($conn, 'attendance', 'class_name', 'class_name VARCHAR(255) NULL DEFAULT NULL');
+    $had_qr_session_id = lecturer_table_has_column($conn, 'attendance', 'qr_session_id');
+    lecturer_ensure_column($conn, 'attendance', 'qr_session_id', 'qr_session_id INT NULL DEFAULT NULL');
+
+    // Safely associate legacy attendance only when exactly one QR session matches.
+    // Ambiguous matches are left unlinked rather than guessed.
+    if (!$had_qr_session_id && lecturer_table_has_column($conn, 'attendance', 'qr_session_id')) {
+        @$conn->query("UPDATE attendance a
+            JOIN (
+                SELECT a2.id AS attendance_id, MIN(q.id) AS qr_id
+                FROM attendance a2
+                JOIN qr_sessions q
+                  ON DATE(q.created_at) = a2.attendance_date
+                 AND q.lecture_name = a2.lecture_name
+                 AND (
+                     (a2.classrep_id IS NOT NULL AND q.classrep_id = a2.classrep_id)
+                     OR (a2.lecturer_id IS NOT NULL AND q.lecturer_id = a2.lecturer_id
+                         AND (a2.session_id IS NULL OR q.session_id = a2.session_id))
+                 )
+                WHERE a2.deleted_at IS NULL AND a2.qr_session_id IS NULL
+                GROUP BY a2.id
+                HAVING COUNT(q.id) = 1
+            ) matched ON matched.attendance_id = a.id
+            SET a.qr_session_id = matched.qr_id");
+    }
 
     // Legacy class_id on qr/attendance may point to old session rows — map session_id where possible
     if (lecturer_table_has_column($conn, 'qr_sessions', 'class_id') && !lecturer_table_has_column($conn, 'qr_sessions', 'session_id_migrated')) {

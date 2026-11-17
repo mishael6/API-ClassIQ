@@ -50,6 +50,7 @@ if ($is_lecturer) {
 $sess->execute();
 $session = $sess->get_result()->fetch_assoc();
 if (!$session) json_error('Attendance session is closed or invalid.');
+$qr_session_id = (int)$session['id'];
 
 if ($is_lecturer) {
     $week_number  = (int)$session['week_number'];
@@ -128,8 +129,8 @@ if ($is_lecturer) {
     }
 
     $null_cr = null;
-    $ins = $conn->prepare("INSERT INTO attendance (student_id, classrep_id, lecturer_id, student_name, index_number, attendance_date, time_marked, lecture_name, week_number, session_id, cohort_id, semester_id, class_name, device_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $ins->bind_param('iiisssssiiiisss', $student['id'], $null_cr, $lecturer_id, $student['name'], $index_number, $today, $time_marked, $lecture_name, $week_number, $session_id, $cohort_id, $semester_id, $class_name, $device_id, $location_status);
+    $ins = $conn->prepare("INSERT INTO attendance (student_id, classrep_id, lecturer_id, student_name, index_number, attendance_date, time_marked, lecture_name, week_number, session_id, qr_session_id, cohort_id, semester_id, class_name, device_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $ins->bind_param('iiisssssiiiiisss', $student['id'], $null_cr, $lecturer_id, $student['name'], $index_number, $today, $time_marked, $lecture_name, $week_number, $session_id, $qr_session_id, $cohort_id, $semester_id, $class_name, $device_id, $location_status);
 } else {
     $dup = $conn->prepare("SELECT 1 FROM attendance WHERE index_number = ? AND attendance_date = CURDATE() AND classrep_id = ? AND lecture_name = ? LIMIT 1");
     $dup->bind_param('sis', $index_number, $classrep_id, $lecture_name);
@@ -146,8 +147,8 @@ if ($is_lecturer) {
         $upd->execute();
     }
 
-    $ins = $conn->prepare("INSERT INTO attendance (student_id, classrep_id, student_name, index_number, attendance_date, time_marked, lecture_name, device_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $ins->bind_param('iisssssss', $student['id'], $classrep_id, $student['name'], $index_number, $today, $time_marked, $lecture_name, $device_id, $location_status);
+    $ins = $conn->prepare("INSERT INTO attendance (student_id, classrep_id, qr_session_id, student_name, index_number, attendance_date, time_marked, lecture_name, device_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $ins->bind_param('iiisssssss', $student['id'], $classrep_id, $qr_session_id, $student['name'], $index_number, $today, $time_marked, $lecture_name, $device_id, $location_status);
 }
 
 if (!$ins->execute()) json_error('Failed to save attendance: ' . $ins->error);
